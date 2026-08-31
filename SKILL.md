@@ -2,7 +2,7 @@
 name: forticnapp-lacework
 description: Investigate FortiCNAPP (formerly Lacework) data with the lacework CLI and API. Use when checking cloud integrations, agents, alerts, host vulnerabilities, risk surface, compliance reports, LQL queries, datasource schemas, or discovering authenticated FortiCNAPP API endpoints.
 metadata:
-  version: "2.0.0"
+  version: "2.1.0"
   homepage: "https://github.com/andrewbearsley/forticnapp-lacework-skill"
 ---
 
@@ -312,7 +312,9 @@ lacework query show-source <DATASOURCE> --json --noninteractive
 lacework query preview-source <DATASOURCE> --json --noninteractive
 ```
 
-For custom CSPM/compliance policies and syntax rules, see [references/lql.md](references/lql.md).
+Never guess JSON key names inside `RESOURCE_CONFIG`. The docs do not publish that schema. Discover keys via `show-source` (which names the provider API call), `preview-source`, or an explore query. Keys are case-sensitive.
+
+For syntax rules, policy-evaluation constraints (queries used by policies must `return distinct` and return only root-datasource columns when they expand arrays or join `MANY`-cardinality datasources), and the query-to-policy workflow (`query create` → `query run` → `policy create` → `policy update`), see [references/lql.md](references/lql.md).
 
 ## Documentation
 

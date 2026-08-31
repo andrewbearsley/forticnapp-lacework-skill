@@ -2,6 +2,8 @@
 
 Use this reference when building Lacework Query Language queries for CSPM, compliance policies, or inventory extraction.
 
+Ground truth: the LQL Reference Guide at https://docs.fortinet.com/document/forticnapp/latest/lql-reference/598361/lql-overview and the CLI walkthrough at https://docs.fortinet.com/document/forticnapp/latest/cli-reference/564847/create-policies-with-the-cli. Verify a rule there before relying on it.
+
 ## Basic structure
 
 ```lql
@@ -27,6 +29,47 @@ Use this reference when building Lacework Query Language queries for CSPM, compl
 - Use `AND`, `OR`, and `NOT` for boolean logic.
 - Use `IN` with nested source blocks for set comparisons.
 - Use `::string` when a JSON path must be cast before comparison.
+- JSON keys inside `RESOURCE_CONFIG` are case-sensitive. Datasource and field names are uppercase.
+
+## Policy evaluation constraints
+
+These rules apply to any query a policy runs. The platform validates them, so a query that ignores them fails as a policy even when it runs fine standalone.
+
+- The first (root) datasource defines what the policy is about. In `LW_HE_MACHINES with LW_HE_PROCESSES`, the policy is about machines.
+- A policy assumes each result row is one violating resource.
+- A query that uses only `ONE`-cardinality connections and no `array_to_rows()` can return columns from any of its datasources.
+- A query that uses a `MANY`-cardinality connection or `array_to_rows()` must obey two rules:
+  - It must use `return distinct`.
+  - It can return columns only from the root datasource and from datasources connected to the root with cardinality `ONE`. It cannot return columns derived from `MANY`-connected datasources or from `array_to_rows()`.
+- The `filter` clause has no such restriction. Filter on expanded rows freely; just do not return them.
+
+Practical consequence: expand arrays to find violations, then return only root-datasource identity columns.
+
+## Discover RESOURCE_CONFIG fields
+
+The docs do not publish the JSON schema inside `RESOURCE_CONFIG`. Do not guess key names or casing. Discover them:
+
+1. `lacework query show-source <DATASOURCE>` lists the top-level fields and names the provider API call the datasource mirrors (for example `describe-security-groups`). The provider's API documentation gives the exact JSON keys and casing.
+2. `lacework query preview-source <DATASOURCE>` returns a sample row. Not available for every datasource.
+3. Run an explore query that returns the bare config, then read the real shape:
+
+```yaml
+---
+queryId: Explore_Datasource
+queryText: |-
+  {
+      source {
+          LW_CFG_AWS_EC2_SECURITY_GROUPS
+      }
+      return {
+          RESOURCE_CONFIG
+      }
+  }
+```
+
+```bash
+lacework query run -f explore.yaml --json --noninteractive
+```
 
 ## Common AWS datasources
 
@@ -219,6 +262,43 @@ Use `with` to join related datasources.
     }
 }
 ```
+
+## From query to policy
+
+A saved query does nothing on its own. A policy wraps a query with metadata and evaluates it on a schedule.
+
+1. Write the query YAML (`queryId` + `queryText`). Target the non-compliant resources. Respect the policy evaluation constraints above.
+2. Test without saving: `lacework query run -f query.yaml`.
+3. Save it: `lacework query create -f query.yaml`, then `lacework query run <queryId>` against collected data.
+4. Write the policy YAML and create it disabled: `lacework policy create -f policy.yaml`.
+5. After the results validate, set `enabled: true` and `alertEnabled: true`, then `lacework policy update -f policy.yaml`.
+
+```yaml
+---
+title: Security Groups Should Not Allow Unrestricted Ingress to TCP Port 445
+enabled: false            # true after validation
+policyType: Violation
+alertEnabled: false       # true after validation
+alertProfile: LW_CFG_AWS_DEFAULT_PROFILE.CFG_AWS_Violation
+evalFrequency: Daily      # Hourly|Daily, optional
+queryId: LW_Custom_UnrestrictedIngressToTCP445
+severity: high            # critical|high|medium|low|info
+description: Security groups should not allow unrestricted ingress to TCP port 445
+remediation: Steps shown to the user in the violation
+```
+
+`alertProfile` follows `alertProfileId.alert_template_name`. Default profiles per provider:
+
+| Provider | alertProfile |
+| --- | --- |
+| AWS | `LW_CFG_AWS_DEFAULT_PROFILE.CFG_AWS_Violation` |
+| Azure | `LW_CFG_AZURE_DEFAULT_PROFILE.Violation` |
+| GCP | `LW_CFG_GCP_DEFAULT_PROFILE.Violation` |
+| OCI | `LW_CFG_OCI_DEFAULT_PROFILE.Violation` |
+
+API equivalents: `POST /api/v2/Queries` then `POST /api/v2/Policies`, with `queryText` as a single line inside the JSON body.
+
+The CLI walkthrough marks Azure, GCP, and OCI config datasource access as a preview feature. Check the current doc before promising it to a customer.
 
 ## Explore datasources
 

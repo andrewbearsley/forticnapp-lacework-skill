@@ -1,0 +1,13 @@
+.DS_Store
+*.swp
+*.swo
+
+# Local credential files, never commit these
+credentials.json
+*-credentials.json
+.lacework-credentials
+.forticnapp-credentials
+
+# Internal surface: diagnostics, endpoint probing, limitation maps.
+# Never published. See internal/README.md.
+internal/

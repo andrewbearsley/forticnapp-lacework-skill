@@ -1,0 +1,4 @@
+interface:
+  display_name: "FortiCNAPP / Lacework CLI"
+  short_description: "Investigate FortiCNAPP data with the lacework CLI and API"
+  default_prompt: "Use $forticnapp-lacework to investigate FortiCNAPP data via read-only lacework CLI and API calls, with scoped queries and concise summaries."

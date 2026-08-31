@@ -3,7 +3,7 @@
 ![Format](https://img.shields.io/badge/format-Agent%20Skill-blue)
 ![License](https://img.shields.io/github/license/andrewbearsley/forticnapp-lacework-skill)
 
-A skill for AI coding agents (Claude Code and Codex CLI) that investigates <a href="https://www.fortinet.com/products/forticnapp" target="_blank">FortiCNAPP</a> (formerly Lacework) data. Works on macOS, Linux, and Windows.
+A skill for AI coding agents (Claude Code, Codex, GitHub Copilot) that investigates <a href="https://www.fortinet.com/products/forticnapp" target="_blank">FortiCNAPP</a> (formerly Lacework) data. Works on macOS, Linux, and Windows.
 
 Covers the native `lacework` CLI verbs (`lacework cloud-account list`, `lacework vulnerability host show-assessment`) and direct REST API calls via `lacework api`. Use CLI verbs for common workflows; drop to raw API for endpoints the CLI doesn't expose or for bulk operations.
 
@@ -23,16 +23,21 @@ The hub reference lives in [`SKILL.md`](SKILL.md); deep dives are in [`reference
 
 Clone into your agent's skills directory. Assumes the agent runtime is already installed.
 
-| Runtime     | Target path                                            |
-|-------------|--------------------------------------------------------|
-| Claude Code | `~/.claude/skills/forticnapp-lacework`                 |
-| Codex CLI   | `${CODEX_HOME:-~/.codex}/skills/forticnapp-lacework`   |
+| Runtime | Target path |
+|---|---|
+| Claude Code | `~/.claude/skills/forticnapp-lacework` |
+| Codex | `~/.agents/skills/forticnapp-lacework` |
+| GitHub Copilot | `~/.copilot/skills/forticnapp-lacework` or `~/.agents/skills/forticnapp-lacework` |
 
 ```bash
 git clone https://github.com/andrewbearsley/forticnapp-lacework-skill.git <target-path>
 ```
 
-Windows: substitute `$env:USERPROFILE` for `~`. In a Codex session, invoke with `$forticnapp-lacework`. Claude Code auto-triggers when the request matches the description.
+For a single repository rather than your whole account, clone into `.agents/skills/forticnapp-lacework` inside that repo. Codex and GitHub Copilot both read it there, and Copilot also reads `.github/skills` and `.claude/skills`.
+
+Windows: substitute `$env:USERPROFILE` for `~`.
+
+Invoke with `$forticnapp-lacework` in Codex. Claude Code and Copilot select it automatically when a request matches the description.
 
 ## Setup
 

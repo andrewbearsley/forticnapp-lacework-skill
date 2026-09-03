@@ -10,23 +10,37 @@ role permission suppresses assessment on some accounts and not others.
 
 ## Detecting an assessment error
 
-Two signals, either one is enough:
-
-- `STATUS` is `Error`, `CouldNotAssess`, or `NotAssessed`.
-- `ASSESSED_RESOURCE_COUNT` is 0 while `RESOURCE_COUNT` is above 0. Resources exist, none were evaluated.
-
-`RequiresManualAssessment` is not an error. It always carries `RESOURCE_COUNT` 0, and it
-means the control cannot be automated.
+Filter on `STATUS`. The values are `CouldNotAssess`, `Error` and `NotAssessed`.
 
 ```bash
 lw api get "api/v2/Reports?format=json&primaryQueryId=<account-id>&reportType=<report-type>" \
   | jq '[.data[0].recommendations[]
-      | select(.STATUS == "Error" or .STATUS == "CouldNotAssess" or .STATUS == "NotAssessed"
-               or (.ASSESSED_RESOURCE_COUNT == 0 and (.RESOURCE_COUNT // 0) > 0))]'
+      | select(.STATUS == "CouldNotAssess" or .STATUS == "Error" or .STATUS == "NotAssessed")]'
 ```
 
-Report the count, the `REC_ID`, and the assessed-over-total ratio. The ratio is what tells
-a customer whether a control was partly or wholly blocked.
+The counts give no warning. A `CouldNotAssess` control can report `RESOURCE_COUNT` 20,
+`ASSESSED_RESOURCE_COUNT` 20 and `NUM_VIOLATIONS` 0, which reads as fully assessed and
+clean. Testing for `ASSESSED_RESOURCE_COUNT == 0` finds nothing.
+
+`RequiresManualAssessment` is not an error. It always carries `RESOURCE_COUNT` 0, and it
+means the control cannot be automated.
+
+## Deciding whether to look
+
+The summary block does not count these controls anywhere. `NUM_RESOURCES_NOT_ASSESSED`,
+`NUM_PARTIALLY_ASSESSED_POLICIES_*` and `NUM_UNKNOWN_POLICIES_*` all read 0 even when the
+recommendations carry them. What gives them away is the arithmetic:
+
+```bash
+lw api get "api/v2/Reports?format=json&primaryQueryId=<account-id>&reportType=<report-type>" \
+  | jq -r '.data[0] as $d
+      | ($d.recommendations | map(select(.STATUS == "RequiresManualAssessment")) | length) as $m
+      | $d.summary[0]
+      | "unassessed: \(.NUM_RECOMMENDATIONS - .NUM_COMPLIANT - .NUM_NOT_COMPLIANT - $m)"'
+```
+
+A non-zero result is the count of controls that could not be evaluated. Run it first, and
+pull the detail only where it is above 0.
 
 ## Across an AWS Organization
 
@@ -56,9 +70,8 @@ printf '%s\n' "$ACCOUNTS" | while IFS= read -r ACCT; do
   [ -n "$ACCT" ] || continue
   lw api get "api/v2/Reports?format=json&primaryQueryId=${ACCT}&reportType=<report-type>" \
     | jq --arg a "$ACCT" '[.data[0].recommendations[]
-        | select(.STATUS == "Error" or .STATUS == "CouldNotAssess" or .STATUS == "NotAssessed"
-                 or (.ASSESSED_RESOURCE_COUNT == 0 and (.RESOURCE_COUNT // 0) > 0))
-        | {ACCOUNT_ID: $a, REC_ID, TITLE, SEVERITY, STATUS, ASSESSED_RESOURCE_COUNT, RESOURCE_COUNT}]' \
+        | select(.STATUS == "CouldNotAssess" or .STATUS == "Error" or .STATUS == "NotAssessed")
+        | {ACCOUNT_ID: $a, REC_ID, TITLE, SEVERITY, STATUS}]' \
     >> "$TMP"
 done
 

@@ -30,6 +30,7 @@ Ground truth: the LQL Reference Guide at https://docs.fortinet.com/document/fort
 - Use `IN` with nested source blocks for set comparisons.
 - Use `::string` when a JSON path must be cast before comparison.
 - JSON keys inside `RESOURCE_CONFIG` are case-sensitive. Datasource and field names are uppercase.
+- Name every returned field. `return { * }` is not valid LQL.
 
 ## Policy evaluation constraints
 

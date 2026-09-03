@@ -3,7 +3,7 @@
 ![Format](https://img.shields.io/badge/format-Agent%20Skill-blue)
 ![License](https://img.shields.io/github/license/andrewbearsley/forticnapp-lacework-skill)
 
-A skill for AI coding agents (Claude Code, Codex, GitHub Copilot) that investigates <a href="https://www.fortinet.com/products/forticnapp" target="_blank">FortiCNAPP</a> (formerly Lacework) data. Works on macOS, Linux, and Windows.
+A skill for AI coding agents (Claude Code, Codex, GitHub Copilot) that investigates <a href="https://www.fortinet.com/products/forticnapp" target="_blank">FortiCNAPP</a> (formerly Lacework) data. Runs on macOS, Linux, and Windows. Command examples are bash and zsh; SKILL.md carries the PowerShell form of the one helper the workflows share.
 
 Covers the native `lacework` CLI verbs (`lacework cloud-account list`, `lacework vulnerability host show-assessment`) and direct REST API calls via `lacework api`. Use CLI verbs for common workflows; drop to raw API for endpoints the CLI doesn't expose or for bulk operations.
 

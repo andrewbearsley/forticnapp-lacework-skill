@@ -23,9 +23,12 @@ Find an AWS account ID from cloud accounts:
 AWS_ACCOUNT_ID=$(lacework api get "api/v2/CloudAccounts" \
   --account "$ACCOUNT" --api_key "$API_KEY" --api_secret "$API_SECRET" \
   --json --noninteractive |
-  jq -r '.data[] | select(.type == "AwsCfg") | .data.awsAccountId' |
+  jq -r '.data[] | select(.type == "AwsCfg")
+    | .data.crossAccountCredentials.roleArn | split(":")[4]' |
   head -1)
 ```
+
+The account ID is inside the role ARN, not a top-level field.
 
 Fetch a report by report type:
 

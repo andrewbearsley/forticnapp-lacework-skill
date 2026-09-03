@@ -1,8 +1,9 @@
 ---
 name: forticnapp-lacework
 description: Investigate FortiCNAPP (formerly Lacework) data with the lacework CLI and API. Use when checking cloud integrations, agents, alerts, host vulnerabilities, risk surface, compliance reports, LQL queries, datasource schemas, or discovering authenticated FortiCNAPP API endpoints.
+allowed-tools: Bash, Read, Grep, Glob
 metadata:
-  version: "2.1.0"
+  version: "2.2.0"
   homepage: "https://github.com/andrewbearsley/forticnapp-lacework-skill"
 ---
 
@@ -178,6 +179,16 @@ lw alert list --start -24h --end now \
   | jq -r 'group_by(.alertName)[] | select(length>1) | "\(length)x\t\(.[0].severity)\t\(.[0].alertName)"' | sort -rn
 ```
 
+The examples in this skill are bash and zsh. On Windows, define `lw` in PowerShell and
+splat the shared flags, because a single string of flags arrives as one argument:
+
+```powershell
+function lw { $f = @('--profile','<profile>','--account','<account>','--subaccount','<subaccount>','--json','--noninteractive'); lacework @args @f }
+```
+
+`jq` filters carry over unchanged inside single quotes. Use a backtick for line
+continuation instead of `\`.
+
 Only drop to `cloud-account show <GUID>` or `alert show <GUID>` once a rollup points at
 something specific, and report the finding rather than the payload.
 
@@ -302,6 +313,8 @@ lacework api get "api/v2/Reports?format=json&primaryQueryId=<cloud-account-id>&r
 
 Custom framework definitions live at two different endpoints depending on how the framework was created. `/api/v2/ReportDefinitions` for API-created, `/api/v1/Frameworks` for UI-created. See [references/reports.md](references/reports.md) for AWS/Azure report parameters and the custom-framework split.
 
+A report also records controls that could not be evaluated, which read as a gap rather than a violation and so never appear in a severity rollup. See [references/compliance-errors.md](references/compliance-errors.md) for the detection predicate, the per-account walk across an AWS Organization, report type codes, and scan triggering.
+
 ### LQL queries
 
 List, inspect, preview, then query:
@@ -323,71 +336,7 @@ For syntax rules, policy-evaluation constraints (queries used by policies must `
 - Interactive API docs: https://api.lacework.net/api/v2/docs
 - LQL reference: https://docs.fortinet.com/document/forticnapp/latest/lql-reference/598361/lql-overview
 
-### Fetching the official docs (no browser)
-
-docs.fortinet.com serves both document text and search results as plain HTML. `curl` reaches both, so no browser, no JavaScript rendering, and no extra tooling are needed.
-
-Search first, then read only the section you need. This keeps the reading small and works for every published document.
-
-**1. Search one document.** Append `/search?q=<query>` to the document path:
-
-```bash
-curl -sL "https://docs.fortinet.com/document/forticnapp/latest/administration-guide/search?q=alert%20channel" \
-  | tr '\n' ' ' \
-  | grep -oE '<div class="result-title"><a href="[^"]+">[^<]+' \
-  | sed -e 's|.*href="|https://docs.fortinet.com|' -e 's|">| :: |' \
-  | awk '!seen[$0]++'
-```
-
-Returns ranked section URLs and titles:
-
-```
-https://docs.fortinet.com/document/forticnapp/latest/administration-guide/413628/configure-alert-channels :: Configure alert channels
-https://docs.fortinet.com/document/forticnapp/latest/administration-guide/8323/email-alert-channel :: Email alert channel
-```
-
-URL-encode spaces in the query as `%20`.
-
-**2. Read a section.** Section text is server-rendered inside `div.document-content`. Scope the strip to that element to drop the site navigation. Decode `&amp;` last, so an escaped entity does not decode twice:
-
-```bash
-curl -sL "<section-url>" \
-  | tr '\n' ' ' \
-  | sed -e 's|.*<div class="document-content[^>]*>||' \
-        -e 's|<div class="doc-nav.*||' \
-        -e 's|<[^>]*>|\n|g' \
-        -e 's|&nbsp;| |g' -e 's|&lt;|<|g' -e 's|&gt;|>|g' \
-        -e 's|&quot;|"|g' -e "s|&#039;|'|g" -e 's|&amp;|\&|g' \
-  | sed -e 's/^ *//' -e 's/ *$//' | grep -v '^$'
-```
-
-**3. List the available documents.** The product landing page carries every document path:
-
-```bash
-curl -sL https://docs.fortinet.com/product/forticnapp \
-  | grep -oE '/document/forticnapp/[^"'"'"' ]*' | sort -u
-```
-
-Returns the current document paths, including `/latest/administration-guide`, `/latest/cli-reference`, `/latest/api-reference`, `/latest/lql-reference`, and `/latest/release-notes`. The set changes as Fortinet republishes, so read it rather than assuming a fixed list.
-
-### Whole document as PDF
-
-Most documents also publish a PDF, which suits bulk grep across a full reference. This route needs `pdftotext` (macOS: `brew install poppler`; Debian and Ubuntu: `apt install poppler-utils`). The HTML route above covers the same content without it, so prefer the PDF only when you want the whole document at once.
-
-Extract the S3 URL, then convert:
-
-```bash
-URL=$(curl -sL https://docs.fortinet.com/document/forticnapp/latest/cli-reference \
-  | grep -oE 'https://fortinetweb\.s3\.amazonaws\.com[^"'"'"' ]*\.pdf' | sort -u | head -1)
-
-curl -sL "$URL" -o cli-ref.pdf
-pdftotext -layout cli-ref.pdf cli-ref.txt
-grep -niE 'query|policy|alert-rule|cloud-account' cli-ref.txt
-```
-
-Keep `sort -u | head -1`: the link appears twice in the page, and the `.pdf` filter matters because the page also embeds many `fortinetweb.s3.amazonaws.com` product icon URLs.
-
-The UUID and, on some documents, the version are part of the URL, and both change when the document is re-published. Re-run the extraction rather than caching the URL. The administration guide is published as HTML only, so use the search and section route for it.
+Read any of these with `curl` alone. docs.fortinet.com serves search results and section text as plain HTML, so no browser and no JavaScript rendering are needed. See [references/docs-access.md](references/docs-access.md) for the search, section-read, and whole-document PDF recipes.
 
 ### Where each answer lives
 

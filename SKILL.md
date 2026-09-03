@@ -3,7 +3,7 @@ name: forticnapp-lacework
 description: Investigate FortiCNAPP (formerly Lacework) data with the lacework CLI and API. Use when checking cloud integrations, agents, alerts, host vulnerabilities, risk surface, compliance reports, LQL queries, datasource schemas, or discovering authenticated FortiCNAPP API endpoints.
 allowed-tools: Bash, Read, Grep, Glob
 metadata:
-  version: "2.2.0"
+  version: "2.3.0"
   homepage: "https://github.com/andrewbearsley/forticnapp-lacework-skill"
 ---
 

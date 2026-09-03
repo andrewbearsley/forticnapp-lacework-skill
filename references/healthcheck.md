@@ -235,7 +235,7 @@ Then reconcile:
 - **Email-only** means every notification depends on one channel type. Flag it.
 - **A channel wired to no alert rule is decorative.** It looks like coverage in the console and delivers nothing. Cross-reference each channel `intgGuid` against the `intgGuidList` of every rule.
 - **Severity gaps matter more than channel count.** A Slack channel subscribed only to `Info` while Critical goes to email alone is a worse finding than having no Slack at all.
-- A disabled channel and a disabled rule fail identically and silently. Check `enabled` on both.
+- Notification stops when either the channel or the rule is disabled, and the result looks the same either way. Check `enabled` on each.
 
 Channel-type variety does not prove coverage. Count the channels that no rule references,
 count the disabled rules, and count the disabled channels. Each one looks like coverage in

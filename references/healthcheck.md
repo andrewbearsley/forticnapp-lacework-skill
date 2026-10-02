@@ -220,11 +220,22 @@ lw alert-rule list \
   | jq -r '(if type=="object" then (.data // []) else . end)[]
       | "\(.filters.name)\tenabled=\(.filters.enabled)\tsev=\((.filters.severity//["all"])|join(","))\tchannels=\((.intgGuidList//[])|length)"'
 
-# Channels wired to no rule at all
-lw alert-rule list \
-  | jq -r '[(if type=="object" then (.data // []) else . end)[].intgGuidList[]?] | unique | length' \
-  | xargs echo "channel GUIDs referenced by rules:"
+# Report rules route to channels too: compliance reports, summaries and event notifications.
+lw report-rule list \
+  | jq -r '(if type=="object" then (.data // []) else . end)[]
+      | "\(.filters.name)\tenabled=\(.filters.enabled)\tsev=\((.filters.severity//["all"])|join(","))\tsends=\((.reportNotificationTypes//{})|to_entries|map(select(.value==true)|.key)|join(","))\tchannels=\((.intgGuidList//[])|length)"'
+
+# Channels wired to no rule at all. Count alert rules and report rules together.
+lw alert-rule list > alert-rules.json
+lw report-rule list > report-rules.json
+jq -s -r '[.[] | (if type=="object" then (.data // []) else . end)[].intgGuidList[]?] | unique | length' \
+  alert-rules.json report-rules.json | xargs echo "channel GUIDs referenced by alert or report rules:"
 lw alert-channel list | jq -r 'length' | xargs echo "channels defined:"
+
+# Email recipients. The field reads back as one comma-separated string, so split it to count.
+lw alert-channel list \
+  | jq -r '.[] | select(.type=="EmailUser")
+      | "\(.name)\tenabled=\(.enabled)\trecipients=\(.data.channelProps.recipients | if type=="string" then split(",") else . end | length)"'
 ```
 
 Rule severities are **numeric**, not names: `1` Critical, `2` High, `3` Medium, `4` Low,
@@ -233,7 +244,8 @@ Rule severities are **numeric**, not names: `1` Critical, `2` High, `3` Medium, 
 Then reconcile:
 
 - **Email-only** means every notification depends on one channel type. Flag it.
-- **A channel wired to no alert rule is decorative.** It looks like coverage in the console and delivers nothing. Cross-reference each channel `intgGuid` against the `intgGuidList` of every rule.
+- **A channel wired to no alert rule and no report rule is decorative.** It looks like coverage in the console and delivers nothing. Cross-reference each channel `intgGuid` against the `intgGuidList` of every alert rule and every report rule.
+- **The default email channel reaches every member who has "Default email notification" turned on** in My Profile. The built-in `DEFAULT RULE` report rule sends to it. On a shared tenant, count its recipients and check which event types that rule sends, because one busy day can email everyone on it. A member who turns the setting off stops receiving mail from that channel only.
 - **Severity gaps matter more than channel count.** A Slack channel subscribed only to `Info` while Critical goes to email alone is a worse finding than having no Slack at all.
 - Notification stops when either the channel or the rule is disabled. Check `enabled` on each.
 

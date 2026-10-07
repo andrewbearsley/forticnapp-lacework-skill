@@ -115,18 +115,17 @@ not the head, or a `400` looks like a bad command line.
 
 ## The v2 endpoint list
 
-The tenant serves its own OpenAPI spec:
+The tenant serves its own OpenAPI spec. The fetch needs no token:
 
 ```bash
-curl -s -H "Authorization: Bearer $TOKEN" \
-  https://<account>.lacework.net/api/v2/docs/lacework-api-v2.0.yaml -o spec.yaml
+curl -s https://<account>.lacework.net/api/v2/docs/lacework-api-v2.0.yaml -o spec.yaml
 
 grep -oE '^  /[A-Za-z0-9/{}_-]+:' spec.yaml | tr -d ' :' | sort -u
 ```
 
 `/api/v2/docs` is the HTML viewer and names the spec file. Use the YAML path.
 
-Get a token with:
+The endpoints in the spec do need a bearer token. Get one with:
 
 ```bash
 TOKEN=$(curl -s -X POST https://<account>.lacework.net/api/v2/access/tokens \

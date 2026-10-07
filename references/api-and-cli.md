@@ -2,12 +2,13 @@
 
 ## Endpoint discovery
 
-Use endpoint discovery when the documented command is incomplete, an API response differs from docs, or the user needs data not exposed by a high-level CLI command.
+Use endpoint discovery when you need more data than a high-level CLI command returns. Also use it to check the exact shape of an API response.
 
 1. Start with the smallest relevant endpoint.
 2. Add required query parameters one at a time.
-3. Always inspect response structure before writing extraction logic.
-4. Record the exact endpoint and parameters that worked in the investigation notes, but omit secrets.
+3. Always inspect the response structure before you write extraction logic.
+4. Record the exact endpoint and parameters that worked in the investigation notes.
+5. Keep secrets out of the notes.
 
 Useful starting points:
 
@@ -35,7 +36,7 @@ lacework cloud-account list \
   --json --noninteractive
 ```
 
-Show a specific integration:
+Show one integration:
 
 ```bash
 lacework cloud-account show <GUID> \
@@ -45,11 +46,11 @@ lacework cloud-account show <GUID> \
 
 Fields to inspect:
 
-- `type`: Integration type, such as `AwsCfg`, `AwsSidekickOrg`, `AzureCfg`, `AzureSidekick`, or `AzureAlSeq`.
-- `enabled`: Whether the integration is enabled.
-- `state.ok`: Current health state.
-- `state.details.message`: Human-readable error or status details.
-- `lastSuccessfulTime`: Last successful collection or scan time.
+- `type`: the integration type, such as `AwsCfg`, `AwsSidekickOrg`, `AzureCfg`, `AzureSidekick`, or `AzureAlSeq`.
+- `enabled`: whether the integration is enabled.
+- `state.ok`: the current health state.
+- `state.details.message`: the error or status detail, in plain text.
+- `lastSuccessfulTime`: the time of the last successful collection or scan.
 
 ## Alerts
 
@@ -87,7 +88,7 @@ lacework query run <query_id> \
   --json --noninteractive
 ```
 
-Execute raw LQL through the API:
+Run raw LQL through the API:
 
 ```bash
 lacework api post /api/v2/Queries/execute \
@@ -103,15 +104,14 @@ lacework api post /api/v2/Queries/execute \
   --json --noninteractive
 ```
 
-`queryText` nests under `query`, and `arguments` is an array of `{name, value}` objects,
-not a map. A flat `{"queryText": ..., "arguments": {...}}` body returns `400 Problem
-parsing JSON`.
+`queryText` nests under `query`. `arguments` is an array of `{name, value}` objects. Send
+the body in the nested shape above.
 
-Config datasources are batched. A 24-hour window usually returns an empty `data` array;
-use 7 days.
+Config datasources are batched. Use a 7-day window for them. A 24-hour window usually
+returns an empty `data` array.
 
-On any error the CLI prints its usage block first and the real error last. Read the tail,
-not the head, or a `400` looks like a bad command line.
+On an error, the CLI prints its usage block first and the real error last. Read the end of
+the output. The usage block alone makes a `400` look like a bad command line.
 
 ## The v2 endpoint list
 
@@ -123,7 +123,7 @@ curl -s https://<account>.lacework.net/api/v2/docs/lacework-api-v2.0.yaml -o spe
 grep -oE '^  /[A-Za-z0-9/{}_-]+:' spec.yaml | tr -d ' :' | sort -u
 ```
 
-`/api/v2/docs` is the HTML viewer and names the spec file. Use the YAML path.
+`/api/v2/docs` is the HTML viewer. It names the spec file. Use the YAML path.
 
 The endpoints in the spec do need a bearer token. Get one with:
 
@@ -133,13 +133,13 @@ TOKEN=$(curl -s -X POST https://<account>.lacework.net/api/v2/access/tokens \
   -d '{"keyId":"<api-key-id>","expiryTime":3600}' | jq -r '.token')
 ```
 
-The spec covers the documented core. Some endpoints are additional to it, so check the
-product documentation and this reference alongside the spec.
+The spec covers the documented core. Read it alongside the product documentation and this
+reference.
 
 ## Known endpoint notes
 
-- `GET /api/v2/Reports`: Use for compliance report data and policy inventories.
-- `GET /api/v2/CloudAccounts`: Use to list cloud integrations and find provider-specific IDs.
-- `GET /api/v2/Configs/AzureSubscriptions`: Use to find Azure subscription IDs for report queries.
-- `POST /api/v2/Vulnerabilities/Hosts/search`: Use for host vulnerability assessment searches.
-- `GET /api/v2/ReportDefinitions`: May omit recent definitions in some tenants; prefer `Reports` when extracting report content.
+- `GET /api/v2/Reports`: use it for compliance report data and policy inventories.
+- `GET /api/v2/CloudAccounts`: use it to list cloud integrations and find provider-specific IDs.
+- `GET /api/v2/Configs/AzureSubscriptions`: use it to find Azure subscription IDs for report queries.
+- `POST /api/v2/Vulnerabilities/Hosts/search`: use it for host vulnerability assessment searches.
+- `GET /api/v2/ReportDefinitions`: returns report definitions. To extract report content, use `Reports`.

@@ -9,25 +9,25 @@ metadata:
 
 # FortiCNAPP / Lacework CLI
 
-Use the local `lacework` CLI for read-only investigation and data extraction. Prefer JSON output and parse with `jq`.
+Use the local `lacework` CLI to read tenant data. Ask for JSON output. Parse it with `jq`.
 
 ## Ground rules
 
 - Use read-only commands by default: `list`, `show`, `query`, `get`, and API `GET`/search requests.
 - Add `--json --noninteractive` for scripts and agent runs.
-- In a network-restricted or approval-gated environment, obtain permitted network access before the first API-backed `lacework` command. Do not use a failed DNS or connection attempt as a connectivity probe.
-- Treat DNS, TLS, timeout, and connection errors as execution-environment failures, not FortiCNAPP health findings. Retry once with permitted network access before reporting the check as incomplete.
-- Verify the effective account and subaccount before tenant-scoped work. Pass the intended `--profile`, `--account`, and `--subaccount` explicitly on every live command when they are known.
-- Summarize JSON locally with `jq` **in the first command, not after seeing the raw output**. In an agent runtime the unreduced response is already in the tool trace and cannot be taken back. Do not paste full integration, agent, or alert payloads unless the user requests them. Raw payloads contain cloud account IDs, role ARNs, queue URLs, hostnames, internal IPs, and the email address in `createdOrUpdatedBy`.
-- Never print, commit, or paste API secrets in final output.
-- Treat credential files as local inputs only. Do not assume they live in a repo.
-- Prefer short API calls and scoped filters before broad exports.
-- For vulnerability host search, keep time windows to 7 days or less unless the API behaviour is known to permit more.
-- If a command shape is uncertain, run `lacework <command> --help` or use the API docs before guessing.
+- Some environments restrict network access or need approval for it. There, get access before the first `lacework` command that calls the API. A failed DNS lookup or connection is not a connectivity test.
+- A DNS, TLS, timeout or connection error is a local environment fault, not a FortiCNAPP health finding. Retry once with network access before you mark the check incomplete.
+- Check the effective account and subaccount before you work on a tenant. When you know the intended `--profile`, `--account` and `--subaccount`, pass them on every live command.
+- Reduce JSON with `jq` **in the first command, before you see the raw output**. In an agent runtime, the full response goes into the tool trace. You can't take it back. Show full integration, agent or alert payloads only when the user asks for them. Raw payloads hold cloud account IDs, role ARNs, queue URLs, hostnames, internal IPs and the email address in `createdOrUpdatedBy`.
+- Keep API secrets out of output, commits and pasted text.
+- Treat credential files as local inputs only. Expect them outside the repo.
+- Start with short API calls and narrow filters. Move to broad exports only when you need them.
+- Keep host vulnerability search windows to 7 days or less, unless you know the API accepts more.
+- When you're unsure of a command's syntax, check `lacework <command> --help` or the API docs first.
 
 ## Credential pattern
 
-Use an existing CLI profile, or a JSON credential file shaped like this:
+Use an existing CLI profile, or a JSON credential file in this format:
 
 ```json
 {
@@ -37,7 +37,7 @@ Use an existing CLI profile, or a JSON credential file shaped like this:
 }
 ```
 
-Load credentials into shell variables using the block for the user's shell.
+Load the credentials into shell variables. Use the block for the user's shell.
 
 **macOS / Linux (bash / zsh):**
 
@@ -68,11 +68,11 @@ lacework <command> \
   --json --noninteractive
 ```
 
-On Windows PowerShell, use a backtick `` ` `` for line continuation instead of `\`, and drop the double quotes around `$ACCOUNT` etc.
+In Windows PowerShell, use a backtick `` ` `` for line continuation, not `\`. Remove the double quotes around `$ACCOUNT` and the other variables.
 
-For subaccounts, include `--subaccount "$SUBACCOUNT"` only when the user provides one or the current account requires it.
+Add `--subaccount "$SUBACCOUNT"` only when the user gives one, or when the account needs one.
 
-Alternative: `lacework configure --profile <name>` stores credentials in the CLI config, and subsequent calls only need `--profile <name>`. Same syntax on all platforms.
+As an alternative, `lacework configure --profile <name>` stores the credentials in the CLI config. Later calls then need only `--profile <name>`. The syntax is the same on all platforms.
 
 ## Core commands
 
@@ -120,35 +120,35 @@ lacework api get /api/v2/CloudAccounts \
 
 ### Tenant healthcheck
 
-A customer-facing report in four sections, run in order. Each answers a question the
-customer actually asks. Full detail in [references/healthcheck.md](references/healthcheck.md):
+The healthcheck is a customer report in four sections. Run them in order. Each section answers
+a question the customer asks. [references/healthcheck.md](references/healthcheck.md) has the
+full detail:
 
 | Section | The customer's question | Covers |
 |---|---|---|
 | 1 Overall setup | What have we got, and does it cover what we own? | Integration Coverage, Integration State, Agentless Coverage, Agent Coverage, Agent Versions, Notification Alerts, AI Assist. |
-| 2 Threats | What has actually been detected? | Composite alerts first, then anomalies, then policy noise. Never severity-sorted. |
-| 3 Risks | What are we exposed to? | Critical misconfigurations from compliance reports, plus internet-exposed live vulnerable packages. Misconfiguration risk needs no agent, so it often carries the section. |
+| 2 Threats | What has actually been detected? | Composite alerts first, then anomalies, then policy noise. Not sorted by severity. |
+| 3 Risks | What are we exposed to? | Critical misconfigurations from compliance reports, plus internet-exposed live vulnerable packages. Misconfiguration risk needs no agent, so it is often the main content. |
 | 4 Recommendations | What should we do about it? | Derived from 1 to 3, ranked act-now / this-quarter / tidy. The deliverable. |
 
-Sections 1 to 3 gather; section 4 is the deliverable. Do not hand over the first three alone.
+Sections 1 to 3 collect the data. Section 4 is the deliverable. Hand over all four sections together.
 
 The commands below cover the ingestion and alert-rollup part of section 1:
 
-1. Read the effective account and subaccount with `lacework configure show account` and `lacework configure show subaccount`. Compare them with the requested target before making live calls. Do not list all profiles.
-2. Obtain network permission first when the execution environment restricts outbound access.
+1. Read the effective account and subaccount with `lacework configure show account` and `lacework configure show subaccount`. Compare them with the requested tenant before you make live calls. Read only the active profile.
+   The full profile list prints API key IDs.
+2. If the environment restricts outbound access, get network permission first.
 3. Run these read-only checks with explicit tenant flags:
-   - `lacework cloud-account list` for integration enablement and state.
-   - `lacework agent list` for agent status and recency.
-   - `lacework alert list --start -24h --end now` for current security attention.
-4. Capture and reduce each JSON result separately. Report counts, unhealthy or disabled integrations, stale agents, alert severities, and recurring alert patterns. Avoid exposing identifiers that are not necessary to explain health.
-5. Distinguish platform health from security posture. Healthy ingestion with open high-severity alerts is "operational, security attention required," not simply healthy.
-6. If one check still fails after an authorized retry, mark only that component as incomplete and include the transport error category. Do not infer tenant failure from a local execution error.
+   - `lacework cloud-account list` for integration state.
+   - `lacework agent list` for agent status and last check-in.
+   - `lacework alert list --start -24h --end now` for alerts from the last 24 hours.
+4. Reduce each JSON result on its own. Report counts, unhealthy or disabled integrations, stale agents, alert severities and recurring alerts. Include an identifier only when the health finding needs it.
+5. Keep platform health separate from security posture. Healthy ingestion with open high-severity alerts is "operational, security attention required", not healthy.
+6. If one check still fails after an approved retry, mark only that check incomplete. Include the error category, such as DNS or TLS. A local error says nothing about the tenant.
 
-Example command shape (replace every placeholder; keep the same values across the healthcheck):
-
-Reduce on the **first** command, not after inspecting raw output. Every one of these
-prints health without emitting an account ID, role ARN, queue URL, hostname, IP, or
-email. Replace every placeholder and keep the same values across the healthcheck.
+Example commands. Reduce on the **first** command, before you see raw output. Each one prints
+health with no account ID, role ARN, queue URL, hostname, IP or email. Replace every
+placeholder. Use the same values for the whole healthcheck.
 
 ```bash
 # Define once. A function, not a variable: zsh does not word-split an unquoted
@@ -179,18 +179,18 @@ lw alert list --start -24h --end now \
   | jq -r 'group_by(.alertName)[] | select(length>1) | "\(length)x\t\(.[0].severity)\t\(.[0].alertName)"' | sort -rn
 ```
 
-The examples in this skill are bash and zsh. On Windows, define `lw` in PowerShell and
-splat the shared flags, because a single string of flags arrives as one argument:
+The examples in this skill are for bash and zsh. On Windows, define `lw` in PowerShell. Splat
+the shared flags, because a single string of flags arrives as one argument:
 
 ```powershell
 function lw { $f = @('--profile','<profile>','--account','<account>','--subaccount','<subaccount>','--json','--noninteractive'); lacework @args @f }
 ```
 
-`jq` filters carry over unchanged inside single quotes. Use a backtick for line
-continuation instead of `\`.
+`jq` filters work unchanged inside single quotes. Use a backtick for line continuation, not
+`\`.
 
-Only drop to `cloud-account show <GUID>` or `alert show <GUID>` once a rollup points at
-something specific, and report the finding rather than the payload.
+Use `cloud-account show <GUID>` or `alert show <GUID>` only after a rollup points at one item.
+Report the finding, not the payload.
 
 **Response shapes by command.** Match the filter to the shape:
 
@@ -200,24 +200,24 @@ something specific, and report the finding rather than the payload.
 | `{"data": [...]}` | `alert-rule list`, `report-rule list`, `resource-group list` |
 | `null` when empty | any `lacework api post ...` search endpoint |
 
-The REST API wraps in `data`. Use an explicit type test when a filter must handle either shape:
+The REST API wraps results in `data`. When a filter must handle both shapes, test the type:
 
 ```bash
 ROWS='if type=="object" then (.data // []) else . end'
 lacework alert-rule list ... | jq -r "$ROWS"' | length'
 ```
 
-Do not run the first live calls in parallel when doing so would trigger multiple network approvals or duplicate expected failures. After access is established, independent read-only checks may run concurrently.
+Run the first live calls one at a time. In parallel, they can trigger several network approvals or repeat the same failure. Once access works, run independent read-only checks in parallel.
 
 For the rest of section 1 and for sections 2 to 4, see
-[references/healthcheck.md](references/healthcheck.md). It carries the filters that keep a
-risk report honest: `machineStatus` for live hosts, excluding suppressed `Exception` rows,
-and the 5000-row paging cap.
+[references/healthcheck.md](references/healthcheck.md). It has the filters a correct risk
+report needs: `machineStatus` for live hosts, removal of suppressed `Exception` rows, and the
+5000-row page limit.
 
 ### Cloud integration health
 
 1. List integrations with `cloud-account list`.
-2. Filter by `type` when looking for a provider or integration class.
+2. To find a provider or integration class, filter by `type`.
 3. Show the target integration by GUID.
 4. Check `enabled`, `state.ok`, `lastSuccessfulTime`, and `state.details.message`.
 
@@ -252,9 +252,9 @@ Group by `evalGuid` to compare unique assessments. Filter on `evalCtx.collector_
 for `null` before you parse the response. When a search returns `null`, check the filter values
 before you report an empty tenant.
 
-**Page size caps at 5000.** Counting rows on the first page produces a wrong severity split
-that looks plausible. Filter per severity and read `paging.totalRows` instead. Unfiltered
-`totalRows` counts every status, including fixed findings, so it runs far above the live count.
+**Pages hold at most 5000 rows.** A severity split counted from the first page is wrong, but
+looks plausible. Filter on each severity and read `paging.totalRows`. Unfiltered `totalRows`
+counts every status, fixed findings included. It is far above the live count.
 
 See [references/vulnerabilities.md](references/vulnerabilities.md) for CVE, collector type, provider, and assessment comparison patterns.
 
@@ -267,18 +267,18 @@ See [references/vulnerabilities.md](references/vulnerabilities.md) for CVE, coll
 `kernel`, `kernelRelease`, `kernelVersion`, `domain`, `createdTime`. Use `agent list` for agent
 version and status.
 
-The two disagree on count and both are right. `Entities/Machines` counts what the platform
-sees, including cloud-inventory hosts with no agent installed. `agent list` counts installed
-agents. Say which one a number came from.
+The two return different counts, and both are correct. `Entities/Machines` counts what the
+platform sees, including cloud-inventory hosts with no agent installed. `agent list` counts
+installed agents. Name the source of each number.
 
-### Who has actually used the tenant
+### Who uses the tenant
 
-`/v2/AuditLogs?startTime=<iso>&endTime=<iso>` answers login and usage questions. Group by
-`userName`, filter `eventDescription` for `logged in`, and split by email domain to group users by
-organisation.
+`/v2/AuditLogs?startTime=<iso>&endTime=<iso>` answers login and usage questions. Group the
+events by `userName`. Filter `eventDescription` for `logged in`. Use the email domain to sort
+users by organisation.
 
-Use this rather than alert or agent data when the question is human engagement. Weekly login
-counts show a real trend; agent check-ins only show that software is running.
+For questions about human engagement, use this, not alert or agent data. Weekly login counts
+show a real trend. Agent check-ins show only that software runs.
 
 **Alert `status` is not an engagement signal.** `Open` / `InProgress` / `Closed` is a workflow
 field that users set by hand. Report it as a plain count if asked. Measure engagement from
@@ -286,7 +286,7 @@ logins.
 
 ### Risk surface reporting
 
-Use current-state vulnerability observation APIs to report exposed hosts, high-severity findings, public exploit exposure, host risk scores, and active container image risk. Start with internet-exposed Critical or High host observations:
+Use the current-state vulnerability observation APIs for risk reports. They cover exposed hosts, high-severity findings, public exploits, host risk scores and active container images. Start with internet-exposed Critical or High host observations:
 
 ```bash
 BODY=$(jq -cn '{
@@ -318,13 +318,13 @@ lacework api post /api/v2/VulnerabilityObservations/Hosts/search \
   --json --noninteractive
 ```
 
-Follow `paging.urls.nextPage` until it is null before grouping large result sets. Group results by host and report max risk score, exposure, cloud identifiers, severity counts, and public exploit counts.
+Before you group a large result set, follow `paging.urls.nextPage` until it is null. Group the results by host. Report the maximum risk score, exposure, cloud identifiers, severity counts and public exploit counts.
 
 See [references/risk-surface.md](references/risk-surface.md) for host, image, and open-port exposure query patterns.
 
 ### Code security
 
-Application security findings read back with an ordinary API key:
+An ordinary API key reads application security findings:
 
 ```bash
 lw api get /api/v2/CodeSec/vulnerabilities        # third-party CVEs
@@ -334,7 +334,7 @@ lw api get /api/v2/CodeSec/components             # dependency inventory with li
 lw api get /api/v2/CodeSec/repositories/summary   # per-repository scan metadata
 ```
 
-All GET, no parameters, wrapped as `{"data": [...]}`, complete set each time. Subtract `numberOfExceptionInstances` from `numberOfInstances` or the total includes suppressed findings. Subaccount comes from `Account-Name`, which `--subaccount` sets. `/secrets` returns its counts as strings while the other endpoints use numbers, so cast with `tonumber` there.
+Each is a GET with no parameters. Each returns the complete set, wrapped as `{"data": [...]}`. Subtract `numberOfExceptionInstances` from `numberOfInstances` to remove suppressed findings from the total. The subaccount comes from the `Account-Name` header, which `--subaccount` sets. `/secrets` returns its counts as strings, so cast them with `tonumber`.
 
 `/api/v2/IacService/Policies` returns the infrastructure as code policy catalogue. See [references/code-security.md](references/code-security.md) for the full endpoint list and worked queries.
 
@@ -348,13 +348,13 @@ lacework api get "api/v2/Reports?format=json&primaryQueryId=<cloud-account-id>&r
   --json --noninteractive
 ```
 
-Custom framework definitions live at two different endpoints depending on how the framework was created. `/api/v2/ReportDefinitions` for API-created, `/api/v1/Frameworks` for UI-created. See [references/reports.md](references/reports.md) for AWS/Azure report parameters and the custom-framework split.
+Custom framework definitions are at two endpoints. The endpoint depends on where you created the framework: `/api/v2/ReportDefinitions` for the API, `/api/v1/Frameworks` for the console. See [references/reports.md](references/reports.md) for AWS/Azure report parameters and the custom-framework split.
 
-A report also records controls that could not be evaluated, which read as a gap rather than a violation and so never appear in a severity rollup. See [references/compliance-errors.md](references/compliance-errors.md) for the detection predicate, the per-account walk across an AWS Organization, report type codes, and scan triggering.
+A report also records controls that it could not evaluate. These are gaps, not violations, so a severity rollup leaves them out. See [references/compliance-errors.md](references/compliance-errors.md) for how to detect them, the per-account walk across an AWS Organization, report type codes and scan triggers.
 
 #### Per-resource evaluations
 
-To ask "which resources fail policy X, and in which accounts", search evaluations rather than pulling whole reports:
+To find which resources fail policy X, and in which accounts, search the evaluations instead of whole reports:
 
 ```bash
 lacework api post /api/v2/Configs/ComplianceEvaluations/search -d "$(jq -cn \
@@ -368,8 +368,8 @@ lacework api post /api/v2/Configs/ComplianceEvaluations/search -d "$(jq -cn \
 
 Request rules:
 
-- `dataset` is mandatory: `AwsCompliance`, `AzureCompliance`, `GcpCompliance` or `K8sCompliance`.
-- The time range caps at 7 days. Default is the last 24 hours.
+- `dataset` is required: `AwsCompliance`, `AzureCompliance`, `GcpCompliance` or `K8sCompliance`.
+- The time range is 7 days at most. The default is the last 24 hours.
 - Row fields are `account` (an object with `AccountId` and `Account_Alias`), `id`, `region`, `resource`, `status`, `severity`, `reason`, `recommendation`, `section`, `evalType`, `reportTime`.
 - Use only the row fields above in `filters` and `returns`. A search with no matching rows returns the literal `null`.
 - The dataset holds non-compliant rows. Count passing resources from `GET /api/v2/Reports`.
@@ -384,9 +384,9 @@ lacework query show-source <DATASOURCE> --json --noninteractive
 lacework query preview-source <DATASOURCE> --json --noninteractive
 ```
 
-Never guess JSON key names inside `RESOURCE_CONFIG`. The docs do not publish that schema. Discover keys via `show-source` (which names the provider API call), `preview-source`, or an explore query. Keys are case-sensitive.
+Never guess JSON key names inside `RESOURCE_CONFIG`. Find the keys with `show-source`, which names the provider API call, or with `preview-source` or an explore query. Keys are case-sensitive.
 
-`preview-source` doubles as an emptiness check. It prints sample rows for a populated datasource and nothing at all for an empty one, with exit code 0 either way. When a policy result looks wrong, sweep the datasources its query reads before suspecting the query:
+`preview-source` also shows if a datasource is empty. It prints sample rows for a populated datasource and nothing for an empty one. The exit code is 0 in both cases. When a policy result looks wrong, check the datasources its query reads first:
 
 ```bash
 for ds in LW_CFG_AWS_EC2_INSTANCES LW_CFG_AWS_SSM_INSTANCE_INFORMATION; do
@@ -399,7 +399,7 @@ Confirm an `EMPTY` result with a `query run` over `--start -7d` before you repor
 
 `query run -f` takes a YAML or JSON file with `queryId` and `queryText`, not bare LQL. Wrap raw LQL with `jq -Rs '{queryId: "Adhoc", queryText: .}' query.lql > query.json`.
 
-For syntax rules, policy-evaluation constraints (queries used by policies must `return distinct` and return only root-datasource columns when they expand arrays or join `MANY`-cardinality datasources), and the query-to-policy workflow (`query create` → `query run` → `policy create` → `policy update`), see [references/lql.md](references/lql.md).
+[references/lql.md](references/lql.md) has the syntax rules and the query-to-policy workflow (`query create` → `query run` → `policy create` → `policy update`). It also has the rules for policy queries. A policy query must `return distinct`. When it expands arrays or joins `MANY`-cardinality datasources, it must return only root-datasource columns.
 
 ## Documentation
 
@@ -408,7 +408,7 @@ For syntax rules, policy-evaluation constraints (queries used by policies must `
 - Interactive API docs: https://api.lacework.net/api/v2/docs
 - LQL reference: https://docs.fortinet.com/document/forticnapp/latest/lql-reference/598361/lql-overview
 
-Read any of these with `curl` alone. docs.fortinet.com serves search results and section text as plain HTML, so no browser and no JavaScript rendering are needed. See [references/docs-access.md](references/docs-access.md) for the search, section-read, and whole-document PDF recipes.
+Read any of these with `curl` alone. docs.fortinet.com serves search results and section text as plain HTML. You need no browser and no JavaScript. See [references/docs-access.md](references/docs-access.md) for the search, section and whole-document PDF recipes.
 
 ### Where each answer lives
 
@@ -421,6 +421,6 @@ Read any of these with `curl` alone. docs.fortinet.com serves search results and
 | Authentication, tokens, datasources, query execution | `api-reference` |
 | REST endpoint catalog, request and response shapes | https://api.lacework.net/api/v2/docs |
 
-The published API reference covers authentication, datasources, and query execution. The interactive API docs carry the full endpoint catalog, so check endpoint names and payload shapes there rather than concluding an endpoint is absent.
+The published API reference covers authentication, datasources and query execution. The interactive API docs have the endpoint catalog. Check endpoint names and payload shapes there before you decide an endpoint is missing.
 
-Use these sources when verifying a claim about FortiCNAPP CLI syntax, product behaviour, API behaviour, LQL grammar, or policy schemas before relying on it. The official documentation is the ground truth, not community references.
+Check a claim against these sources before you rely on it. This covers CLI syntax, product and API behaviour, LQL grammar and policy schemas. The official documentation is the ground truth. Community references are not.

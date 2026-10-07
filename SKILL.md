@@ -351,7 +351,7 @@ lacework api get "api/v2/Reports?format=json&primaryQueryId=<cloud-account-id>&r
   --json --noninteractive
 ```
 
-Custom framework definitions are at two endpoints. The endpoint depends on where you created the framework: `/api/v2/ReportDefinitions` for the API, `/api/v1/Frameworks` for the console. See [references/reports.md](references/reports.md) for AWS/Azure report parameters and the custom-framework split.
+Custom framework definitions are at two endpoints. The endpoint depends on where you created the framework: `/api/v2/ReportDefinitions` for the API, `/api/v1/Frameworks` for the console. See [references/reports.md](references/reports.md) for AWS/Azure report parameters and custom framework definitions.
 
 A report also records controls that it could not evaluate. These are gaps, not violations, so a severity rollup leaves them out. See [references/compliance-errors.md](references/compliance-errors.md) for how to detect them, the per-account walk across an AWS Organization, report type codes and scan triggers.
 

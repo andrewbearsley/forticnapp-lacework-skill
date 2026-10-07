@@ -43,13 +43,13 @@ By severity:
 ## Compare agent and agentless
 
 1. Search by `mid` without a collector filter.
-2. Group results by `evalCtx.collector_type`.
-3. Group again by `evalGuid` to identify unique assessment runs.
+2. Group the results by `evalCtx.collector_type`.
+3. Group them again by `evalGuid` to find unique assessment runs.
 4. Compare `startTime`, `endTime`, severity counts, and vulnerability IDs.
 
 ## CVE lookup
 
-List hosts affected by a CVE:
+List the hosts that a CVE affects:
 
 ```bash
 lacework vulnerability host list-hosts <CVE_ID> \
@@ -65,4 +65,4 @@ lacework vulnerability host show-assessment <MID> \
   --json --noninteractive
 ```
 
-Avoid broad `vulnerability host list-cves` calls unless the user explicitly needs a wide export; they can be slow and noisy.
+Run a broad `vulnerability host list-cves` call only when the user asks for a wide export. Broad calls can be slow and noisy.

@@ -30,22 +30,22 @@ lw api get /api/v2/IacService/Policies            # infrastructure as code polic
 | `/api/v2/CodeSec/repositories/count` | Per-repository instance counts |
 | `/api/v2/IacService/Policies` | `policyId`, `title`, `severity`, `category`, `provider`, `checkTool`, `checkType[]`, `description`, `guidelines`, `policyOverride` |
 
-All GET. No query parameters. Each returns the complete set wrapped as `{"data": [...]}`, so there is no paging to follow.
+Each endpoint is a GET with no query parameters. Each returns the complete set in one response, wrapped as `{"data": [...]}`.
 
 ## Scoping to a subaccount
 
-The `Account-Name` header selects the subaccount, and `--subaccount` sets it:
+The `Account-Name` header selects the subaccount. `--subaccount` sets the header:
 
 ```bash
 lacework api get /api/v2/CodeSec/vulnerabilities \
   --profile "<profile>" --subaccount "<subaccount>" --json --noninteractive
 ```
 
-Confirm the subaccount before reporting a number, because each one returns its own complete, plausible-looking result.
+Confirm the subaccount before you report a number. Each subaccount returns its own complete result. A result from the wrong subaccount looks plausible.
 
 ## Counting findings
 
-Every findings endpoint reports exceptions beside the total. Subtract them for the live count:
+Every findings endpoint reports exceptions beside the total. Subtract them to get the live count:
 
 ```bash
 lw api get /api/v2/CodeSec/vulnerabilities \
@@ -54,9 +54,9 @@ lw api get /api/v2/CodeSec/vulnerabilities \
       | "crit/high CVEs=\(length)  liveInstances=\(map(.numberOfInstances - .numberOfExceptionInstances)|add)"'
 ```
 
-Severity values are lower case on the application security endpoints (`critical`, `high`, `medium`, `low`) and capitalised on `IacService/Policies` (`Critical`, `High`, `Medium`, `Low`).
+On the application security endpoints, severity values are lower case (`critical`, `high`, `medium`, `low`). On `IacService/Policies`, they're capitalised (`Critical`, `High`, `Medium`, `Low`).
 
-Counts on `/api/v2/CodeSec/secrets` are strings, so cast with `tonumber` before arithmetic or sorting on that endpoint.
+Counts on `/api/v2/CodeSec/secrets` are strings. Cast them with `tonumber` before you do arithmetic or sort on them.
 
 ## Worked queries
 
@@ -99,6 +99,6 @@ lacework sca scan <directory-or-git-url> \
 lacework iac scan --directory <dir> --profile "<profile>" --noninteractive
 ```
 
-`sca scan` covers dependencies, code weaknesses, secrets and licences in one pass. Add `--save-results` to send results to the tenant. `iac scan` returns a policy table with `POLICY-ID`, `SEVERITY`, `PASS`, `TITLE`, `FILE-PATH` and `LINE`.
+`sca scan` covers dependencies, code weaknesses, secrets and licences in one pass. Add `--save-results` to send the results to the tenant. `iac scan` returns a policy table with `POLICY-ID`, `SEVERITY`, `PASS`, `TITLE`, `FILE-PATH` and `LINE`.
 
-`iac scan` runs two engines. Opal needs the CLI alone; checkov needs a running Docker daemon. Read the summary line for the finding count.
+`iac scan` runs two engines. The Opal engine needs only the CLI. The checkov engine needs a running Docker daemon. Read the summary line for the finding count.

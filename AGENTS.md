@@ -52,4 +52,4 @@ Document what works:
 
 Keep API gotchas in SKILL.md and `references/` only. A second copy gets out of date.
 
-Check any claim about API behaviour against the current doc PDF before it goes in. SKILL.md shows how to get the PDF.
+Check any claim about API behaviour against the current doc PDF before it goes in. `references/docs-access.md` shows how to get the PDF.

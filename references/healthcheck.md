@@ -127,8 +127,8 @@ The cloud configuration inventory is the denominator. Configuration datasources 
 runq() {  # $1 = LQL
   lacework api post /api/v2/Queries/execute --profile "<profile>" --json --noninteractive \
     -d "$(jq -cn --arg q "$1" '{query:{queryText:$q},options:{limit:5000},
-          arguments:[{name:"StartTimeRange",value:"'"$(date -u -v-7d +%Y-%m-%dT%H:%M:%SZ)"'"},
-                     {name:"EndTimeRange",  value:"'"$(date -u +%Y-%m-%dT%H:%M:%SZ)"'"}]}')"
+          arguments:[{name:"StartTimeRange",value:(now - 7*86400 | floor | todate)},
+                     {name:"EndTimeRange",  value:(now | floor | todate)}]}')"
 }
 
 # Running instances per cloud
@@ -345,13 +345,31 @@ done | jq -s -r 'group_by(.title)
     | "sev\(.sev)\taccounts=\(.accts)\tresources=\(.res)\t\(.title)"'
 ```
 
-Azure and Google Cloud use the same shape with different identifiers:
+Azure and Google Cloud reports have the same `summary` and `recommendations` fields. Only the identifiers differ. Each `get-report` call reads from `/dev/null`, so it can't consume the loop's input:
 
 ```bash
-lacework compliance azure list-tenants --profile "<profile>" --json --noninteractive
-lacework compliance azure get-report <tenant-id> <subscription-id> --profile "<profile>" --json --noninteractive
-lacework compliance google list-projects <org-id> --profile "<profile>" --json --noninteractive
+# Azure: one rollup line per enabled subscription
+lacework compliance azure list-tenants --profile "<profile>" --json --noninteractive \
+  | jq -r '.azure_subscriptions[] | select(.status=="Enabled") | "\(.tenant_id) \(.subscription_id)"' \
+  | while read -r t s; do
+      lacework compliance azure get-report "$t" "$s" --profile "<profile>" --json --noninteractive </dev/null 2>/dev/null \
+        | jq -r --arg s "$s" '.summary[0]
+            | "sub=\($s)\tcritical=\(.NUM_SEVERITY_1_NON_COMPLIANCE)\thigh=\(.NUM_SEVERITY_2_NON_COMPLIANCE)"
+            + "\tviolatedResources=\(.VIOLATED_RESOURCE_COUNT)\tassessed=\(.ASSESSED_RESOURCE_COUNT)"'
+    done
+
+# Google Cloud: one rollup line per enabled project
+lacework compliance google list --profile "<profile>" --json --noninteractive \
+  | jq -r '.gcp_projects[] | select(.status=="Enabled") | "\(.organization_id) \(.project_id)"' \
+  | while read -r o p; do
+      lacework compliance google get-report "$o" "$p" --profile "<profile>" --json --noninteractive </dev/null 2>/dev/null \
+        | jq -r --arg p "$p" '.summary[0]
+            | "project=\($p)\tcritical=\(.NUM_SEVERITY_1_NON_COMPLIANCE)\thigh=\(.NUM_SEVERITY_2_NON_COMPLIANCE)"
+            + "\tviolatedResources=\(.VIOLATED_RESOURCE_COUNT)\tassessed=\(.ASSESSED_RESOURCE_COUNT)"'
+    done
 ```
+
+For named findings, put the `.recommendations[]` filter from the AWS block inside these loops.
 
 Rank by how many accounts share a finding, not by raw resource count. A Critical present in every account is a policy problem worth one conversation. A single account with many violating resources is one remediation task.
 

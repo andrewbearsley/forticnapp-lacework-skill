@@ -360,9 +360,8 @@ A report also records controls that it could not evaluate. These are gaps, not v
 To find which resources fail policy X, and in which accounts, search the evaluations instead of whole reports:
 
 ```bash
-lacework api post /api/v2/Configs/ComplianceEvaluations/search -d "$(jq -cn \
-  --arg s "$(date -u -v-24H +%Y-%m-%dT%H:%M:%SZ)" --arg e "$(date -u +%Y-%m-%dT%H:%M:%SZ)" '{
-    timeFilter: {startTime: $s, endTime: $e},
+lacework api post /api/v2/Configs/ComplianceEvaluations/search -d "$(jq -cn '{
+    timeFilter: {startTime: (now - 86400 | floor | todate), endTime: (now | floor | todate)},
     dataset: "AwsCompliance",
     filters: [{field: "id", expression: "eq", value: "lacework-global-<n>"}],
     returns: ["account", "id", "region", "resource", "status", "reason", "reportTime"]

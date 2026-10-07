@@ -162,7 +162,7 @@ Fortinet publishes current versions and end-of-life dates per platform. Windows 
 - Linux: `https://docs.fortinet.com/document/forticnapp/latest/agent-support/49926/linux-agent-versions`
 - Windows: `https://docs.fortinet.com/document/forticnapp/latest/agent-support/244773/windows-agent-versions`
 
-Both pages carry a table of `version | type | GA | end of engineering | end of support`, with the current release tagged `Latest`. Scope the parse to `div.document-content` and dedupe rows, because the page renders each table twice.
+Both pages carry a table of `version | type | GA | end of engineering | end of support`, with the current release tagged `Latest`. Scope the parse to `<article class="reader__page">` and dedupe rows by version.
 
 ```bash
 python3 - <<'EOF'
@@ -172,7 +172,7 @@ PAGES = {"linux":   ".../agent-support/49926/linux-agent-versions",
 for os_, url in PAGES.items():
     t = urllib.request.urlopen(urllib.request.Request(
         url, headers={"User-Agent": "Mozilla/5.0"}), timeout=60).read().decode("utf-8", "replace")
-    body = re.search(r'(?is)<div class="document-content[^"]*">(.*)', t).group(1)
+    body = re.search(r'(?is)<article class="reader__page"[^>]*>(.*?)</article>', t).group(1)
     seen, rows = set(), []
     for tbl in re.findall(r'(?is)<table.*?</table>', body):
         for r in re.findall(r'(?is)<tr[^>]*>(.*?)</tr>', tbl):

@@ -10,32 +10,41 @@ for every published document.
 
 Append `/search?q=<query>` to the document path:
 
+The quickest form is the suggest endpoint, which returns JSON:
+
+```bash
+curl -s "https://docs.fortinet.com/document/forticnapp/latest/administration-guide/search/suggest?q=alert%20channel" \
+  | jq -r '.[] | "https://docs.fortinet.com\(.href) :: \(.title)"'
+```
+
+The full search page is server-rendered HTML. Each hit sits in an `es-row-title` heading:
+
 ```bash
 curl -sL "https://docs.fortinet.com/document/forticnapp/latest/administration-guide/search?q=alert%20channel" \
   | tr '\n' ' ' \
-  | grep -oE '<div class="result-title"><a href="[^"]+">[^<]+' \
+  | grep -oE '<h3 class="es-row-title">\s*<a href="[^"]+">[^<]+' \
   | sed -e 's|.*href="|https://docs.fortinet.com|' -e 's|">| :: |' \
   | awk '!seen[$0]++'
 ```
 
-Returns ranked section URLs and titles:
+Both return ranked section URLs and titles:
 
 ```
+https://docs.fortinet.com/document/forticnapp/latest/administration-guide/746001/alert-channels :: Alert channels
 https://docs.fortinet.com/document/forticnapp/latest/administration-guide/413628/configure-alert-channels :: Configure alert channels
-https://docs.fortinet.com/document/forticnapp/latest/administration-guide/8323/email-alert-channel :: Email alert channel
 ```
 
-URL-encode spaces in the query as `%20`.
+URL-encode spaces in the query as `%20`. The site markup changes between releases. When the grep returns nothing for a query that must have hits, fetch the page and look for the class that wraps each result title, then fix the pattern. Suggest matches loosely on title, so a policy ID or an exact phrase can return neighbouring pages. Read the page before quoting it.
 
 ## 2. Read a section
 
-Section text is server-rendered inside `div.document-content`. Scope the strip to that element to drop the site navigation. Decode `&amp;` last, so an escaped entity does not decode twice:
+Section text is server-rendered inside `<article class="reader__page">`. Scope the strip to that element to drop the site navigation. Decode `&amp;` last, so an escaped entity does not decode twice:
 
 ```bash
 curl -sL "<section-url>" \
   | tr '\n' ' ' \
-  | sed -e 's|.*<div class="document-content[^>]*>||' \
-        -e 's|<div class="doc-nav.*||' \
+  | sed -e 's|.*<article class="reader__page"[^>]*>||' \
+        -e 's|</article>.*||' \
         -e 's|<[^>]*>|\n|g' \
         -e 's|&nbsp;| |g' -e 's|&lt;|<|g' -e 's|&gt;|>|g' \
         -e 's|&quot;|"|g' -e "s|&#039;|'|g" -e 's|&amp;|\&|g' \

@@ -2,7 +2,7 @@
 
 ## What this is
 
-Agent skill packaging FortiCNAPP (Lacework) investigation patterns. Covers both native `lacework` CLI commands and direct REST API calls (via `lacework api` or any HTTP client) so an agent can pick whichever fits the task.
+This repo is an agent skill for FortiCNAPP (formerly Lacework) investigations. It uses native `lacework` CLI commands and direct REST API calls, through `lacework api` or any HTTP client. The agent picks the one that fits the task.
 
 ## Project structure
 
@@ -15,23 +15,41 @@ agents/openai.yaml    # Codex CLI interface metadata
 LICENSE               # MIT
 ```
 
-No scripts. The skill is Markdown consumed by agent runtimes. SKILL.md is the entry point; it links into `references/` for detail.
+There are no scripts. Agent runtimes read the skill as Markdown. SKILL.md is the entry point. It links into `references/` for detail.
 
 ## What goes in
 
-Document what works: endpoints and what they return, commands that run, and the fields an integrator needs to write correct code. "Counts are strings on this endpoint" is the right level of detail.
+Document what works:
+
+- Endpoints, and what each one returns
+- Commands that run
+- Fields an integrator needs to write correct code
+
+"Counts are strings on this endpoint" is the right level of detail.
 
 ## Style
 
-- Casual tone in docs (not corporate)
-- Keep SKILL.md self-contained: no internal references, no customer-identifiable examples
-- Shell examples must run in sh, bash and zsh. zsh does not word-split an unquoted
-  parameter, so `for x in $LIST` iterates once. Use `printf | while IFS= read -r`, and
-  collect to a file because a `while` on the right of a pipe runs in a subshell. Avoid
-  process substitution `<(...)`; it is not POSIX and has no PowerShell form.
+- Write in STE-Lite: the ASD-STE100 writing rules, without its approved-word dictionary.
+  - One instruction per sentence.
+  - Active voice, present tense.
+  - Procedure sentences of 20 words or fewer. Descriptive sentences of 25 words or fewer.
+  - Positive commands. For a real prohibition, put "never" or "do not" directly before the verb.
+  - One term for each concept in a file.
+  - Plain, common technical words. Product, API and CLI names stay as they are.
+- Casual tone. Contractions are fine.
+- Keep SKILL.md self-contained. Refer only to public sources.
+- Make sure no example identifies a customer.
+- Make sure each shell example runs in sh, bash and zsh. See the next section.
+
+## Shell portability
+
+- zsh doesn't word-split an unquoted parameter. A `for x in $LIST` loop runs once.
+- Read a list with `printf | while IFS= read -r`.
+- A `while` loop on the right of a pipe runs in a subshell. Collect its output in a file.
+- Use a temporary file in place of process substitution `<(...)`. Process substitution isn't POSIX and has no PowerShell form.
 
 ## API gotchas
 
-Do not mirror them here. They live in SKILL.md and `references/`, and a second copy goes stale without anyone noticing.
+Keep API gotchas in SKILL.md and `references/` only. A second copy gets out of date.
 
-Anything asserted about API behaviour needs a check against the current doc PDF before it goes in. SKILL.md documents how to pull one.
+Check any claim about API behaviour against the current doc PDF before it goes in. SKILL.md shows how to get the PDF.

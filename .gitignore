@@ -11,6 +11,5 @@ credentials.json
 # Local agent settings. Names personal MCP servers, never publish.
 .claude/
 
-# Internal surface: diagnostics, endpoint probing, limitation maps.
-# Never published. See internal/README.md.
+# Local working notes
 internal/

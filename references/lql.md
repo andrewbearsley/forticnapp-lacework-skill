@@ -1,8 +1,8 @@
 # LQL reference
 
-Use this reference when building Lacework Query Language queries for CSPM, compliance policies, or inventory extraction.
+Use this reference when you build Lacework Query Language queries for CSPM, compliance policies, or inventory extraction.
 
-Ground truth: the LQL Reference Guide at https://docs.fortinet.com/document/forticnapp/latest/lql-reference/598361/lql-overview and the CLI walkthrough at https://docs.fortinet.com/document/forticnapp/latest/cli-reference/564847/create-policies-with-the-cli. Verify a rule there before relying on it.
+The ground truth is the LQL Reference Guide at https://docs.fortinet.com/document/forticnapp/latest/lql-reference/598361/lql-overview and the CLI walkthrough at https://docs.fortinet.com/document/forticnapp/latest/cli-reference/564847/create-policies-with-the-cli. Check a rule there before you rely on it.
 
 ## Basic structure
 
@@ -22,37 +22,37 @@ Ground truth: the LQL Reference Guide at https://docs.fortinet.com/document/fort
 
 ## Syntax rules
 
-- Use `<>` for not equal. Do not use `!=`.
+- Use `<>` for not equal, not `!=`.
 - Use single quotes for strings.
 - Access nested JSON with colon notation: `RESOURCE_CONFIG:Field.SubField`.
 - Use `IS NULL` and `IS NOT NULL` for null checks.
 - Use `AND`, `OR`, and `NOT` for boolean logic.
 - Use `IN` with nested source blocks for set comparisons.
-- Use `::string` when a JSON path must be cast before comparison.
+- Use `::string` to cast a JSON path before you compare it.
 - JSON keys inside `RESOURCE_CONFIG` are case-sensitive. Datasource and field names are uppercase.
 - Name every returned field. `return { * }` is not valid LQL.
 
 ## Policy evaluation constraints
 
-These rules apply to any query a policy runs. The platform validates them, so a query that ignores them fails as a policy even when it runs fine standalone.
+These rules apply to any query that a policy runs. The platform validates them. A query that runs fine on its own still fails as a policy if it breaks them.
 
 - The first (root) datasource defines what the policy is about. In `LW_HE_MACHINES with LW_HE_PROCESSES`, the policy is about machines.
-- A policy assumes each result row is one violating resource.
+- A policy treats each result row as one violating resource.
 - A query that uses only `ONE`-cardinality connections and no `array_to_rows()` can return columns from any of its datasources.
-- A query that uses a `MANY`-cardinality connection or `array_to_rows()` must obey two rules:
+- A query that uses a `MANY`-cardinality connection or `array_to_rows()` must follow two rules:
   - It must use `return distinct`.
   - It can return columns only from the root datasource and from datasources connected to the root with cardinality `ONE`. It cannot return columns derived from `MANY`-connected datasources or from `array_to_rows()`.
-- The `filter` clause has no such restriction. Filter on expanded rows freely; just do not return them.
+- The `filter` clause has no such restriction. Filter on expanded rows freely. Keep them out of the `return` clause.
 
-Practical consequence: expand arrays to find violations, then return only root-datasource identity columns.
+In practice, expand arrays to find violations. Then return only the identity columns of the root datasource.
 
 ## Discover RESOURCE_CONFIG fields
 
-The docs do not publish the JSON schema inside `RESOURCE_CONFIG`. Do not guess key names or casing. Discover them:
+Never guess JSON key names or casing inside `RESOURCE_CONFIG`. Find them with these steps:
 
-1. `lacework query show-source <DATASOURCE>` lists the top-level fields and names the provider API call the datasource mirrors (for example `describe-security-groups`). The provider's API documentation gives the exact JSON keys and casing.
-2. `lacework query preview-source <DATASOURCE>` returns a sample row. Not available for every datasource.
-3. Run an explore query that returns the bare config, then read the real shape:
+1. `lacework query show-source <DATASOURCE>` lists the top-level fields. It also names the provider API call that the datasource mirrors, for example `describe-security-groups`. The provider's API documentation gives the exact JSON keys and casing.
+2. `lacework query preview-source <DATASOURCE>` returns a sample row. If it prints nothing, use the explore query in step 3.
+3. Run an explore query that returns the bare `RESOURCE_CONFIG`. Read the real shape from its output:
 
 ```yaml
 ---
@@ -74,7 +74,7 @@ lacework query run -f explore.yaml --json --noninteractive
 
 ## Common AWS datasources
 
-| Resource Level | Datasource | Description |
+| Resource level | Datasource | Description |
 | --- | --- | --- |
 | Account | `LW_CFG_AWS_ACCOUNTS` | AWS accounts |
 | Account | `LW_CFG_AWS_ACCOUNT_GET_ALTERNATE_CONTACT` | Account alternate contacts |
@@ -82,7 +82,7 @@ lacework query run -f explore.yaml --json --noninteractive
 | EC2 | `LW_CFG_AWS_EC2_SECURITY_GROUPS` | Security groups |
 | EC2 | `LW_CFG_AWS_EC2_VOLUMES` | EBS volumes |
 | S3 | `LW_CFG_AWS_S3` | S3 buckets |
-| S3 | `LW_CFG_AWS_S3_GET_BUCKET_ENCRYPTION` | Bucket encryption config |
+| S3 | `LW_CFG_AWS_S3_GET_BUCKET_ENCRYPTION` | Bucket encryption configuration |
 | IAM | `LW_CFG_AWS_IAM_USERS` | IAM users |
 | IAM | `LW_CFG_AWS_IAM_ROLES` | IAM roles |
 | IAM | `LW_CFG_AWS_IAM_POLICIES` | IAM policies |
@@ -108,7 +108,7 @@ For account-level findings, use `ACCOUNT_ID as RESOURCE_KEY`.
 
 ## Account-level missing configuration
 
-Use `NOT IN` when checking accounts that lack a related configuration.
+Use `NOT IN` to find accounts that lack a related configuration.
 
 ```lql
 {
@@ -234,7 +234,7 @@ Use `with` to join related datasources.
 }
 ```
 
-## Empty config and casting
+## Empty configuration and casting
 
 ```lql
 {
@@ -268,11 +268,11 @@ Use `with` to join related datasources.
 
 A saved query does nothing on its own. A policy wraps a query with metadata and evaluates it on a schedule.
 
-1. Write the query YAML (`queryId` + `queryText`). Target the non-compliant resources. Respect the policy evaluation constraints above.
-2. Test without saving: `lacework query run -f query.yaml`.
-3. Save it: `lacework query create -f query.yaml`, then `lacework query run <queryId>` against collected data.
-4. Write the policy YAML and create it disabled: `lacework policy create -f policy.yaml`.
-5. After the results validate, set `enabled: true` and `alertEnabled: true`, then `lacework policy update -f policy.yaml`.
+1. Write the query YAML with `queryId` and `queryText`. Target the non-compliant resources. Follow the policy evaluation constraints above.
+2. Test the query without saving it: `lacework query run -f query.yaml`.
+3. Save the query with `lacework query create -f query.yaml`. Then run `lacework query run <queryId>` against collected data.
+4. Write the policy YAML. Create the policy disabled with `lacework policy create -f policy.yaml`.
+5. After you validate the results, set `enabled: true` and `alertEnabled: true`. Then run `lacework policy update -f policy.yaml`.
 
 ```yaml
 ---
@@ -288,7 +288,7 @@ description: Security groups should not allow unrestricted ingress to TCP port 4
 remediation: Steps shown to the user in the violation
 ```
 
-`alertProfile` follows `alertProfileId.alert_template_name`. Default profiles per provider:
+`alertProfile` takes the form `alertProfileId.alert_template_name`. Each provider has a default profile:
 
 | Provider | alertProfile |
 | --- | --- |
@@ -297,9 +297,9 @@ remediation: Steps shown to the user in the violation
 | GCP | `LW_CFG_GCP_DEFAULT_PROFILE.Violation` |
 | OCI | `LW_CFG_OCI_DEFAULT_PROFILE.Violation` |
 
-API equivalents: `POST /api/v2/Queries` then `POST /api/v2/Policies`, with `queryText` as a single line inside the JSON body.
+To do the same through the API, call `POST /api/v2/Queries` first. Then call `POST /api/v2/Policies`. Put `queryText` on a single line inside the JSON body.
 
-The CLI walkthrough marks Azure, GCP, and OCI config datasource access as a preview feature. Check the current doc before promising it to a customer.
+The CLI walkthrough marks Azure, GCP, and OCI config datasource access as a preview feature. Check the current doc before you promise it to a customer.
 
 ## Explore datasources
 

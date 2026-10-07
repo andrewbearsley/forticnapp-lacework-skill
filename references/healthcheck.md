@@ -1,6 +1,6 @@
 # Tenant healthcheck
 
-A customer-facing report in four sections, run in order. Each answers a question the customer actually asks:
+The healthcheck is a customer report in four sections. Run them in order. Each section answers a question the customer asks:
 
 | Section | The customer's question |
 |---|---|
@@ -9,17 +9,17 @@ A customer-facing report in four sections, run in order. Each answers a question
 | 3. Risks | What are we exposed to? |
 | 4. Recommendations | What should we do about it? |
 
-Sections 1 to 3 gather. Section 4 is the deliverable, derived from the first three rather than queried. Do not hand over sections 1 to 3 alone; a customer reading raw counts has to do the analysis you were there to do.
+Sections 1 to 3 collect the data. Section 4 is the deliverable. Derive it from the first three sections, not from a new query. Hand over all four sections together. With raw counts alone, the customer has to do the analysis you were there to do.
 
-Every command reduces with `jq` in the first call. None emit an account ID, ARN, queue URL, hostname, IP, or email.
+Every command reduces its output with `jq` in the first call. Sections 1 and 2 print no account ID, ARN, queue URL, hostname, IP or email. Section 3 prints cloud account IDs where a finding needs them.
 
-Define the tenant flags once. Use a function, not a variable: zsh does not word-split an unquoted parameter, so `TENANT='--flag ...'` arrives as one bad argument.
+Define the tenant flags once. Use a function, not a variable. zsh doesn't word-split an unquoted parameter, so `TENANT='--flag ...'` arrives as one bad argument.
 
 ```bash
 lw() { lacework "$@" --profile "<profile>" --account "<account>" --subaccount "<subaccount>" --json --noninteractive; }
 ```
 
-**Shape trap.** CLI `--json` output is not one shape. `cloud-account list`, `agent list`, `alert list`, `alert-channel list` and `policy list` return bare arrays. `alert-rule list`, `report-rule list` and `resource-group list` wrap in `{"data": [...]}`. An `api post` search returns literal `null` when nothing matches. `.data // .` cannot bridge these, because indexing an array with a string throws before `//` is reached. Where a filter must handle either, use `if type=="object" then (.data // []) else . end`.
+**Response shapes.** Match each filter to the shape of the command's `--json` output. `cloud-account list`, `agent list`, `alert list`, `alert-channel list` and `policy list` return bare arrays. `alert-rule list`, `report-rule list` and `resource-group list` wrap results in `{"data": [...]}`. An `api post` search returns the literal `null` when nothing matches. A `.data // .` filter fails on a bare array. jq throws an error on the string index before `//` runs. When a filter must handle both shapes, use `if type=="object" then (.data // []) else . end`.
 
 ## Writing the report
 
@@ -29,16 +29,14 @@ Write every customer-facing line in **Simplified Technical English (ASD-STE100)*
 - Active voice, present tense.
 - Short sentences. Procedures 20 words or fewer, descriptive text 25 or fewer.
 - Positive commands. Write "Enable agentless scanning", not "Do not leave scanning disabled".
-- One word per concept. Do not alternate between "integration", "connector", and "collector".
+- One word per concept. Use "integration" every time, not "connector" or "collector".
 - Plain, common technical words.
 
-Do not use em-dashes or en-dashes in prose. Use a comma, a colon, or a full stop.
+In prose, use a comma, a colon or a full stop in place of an em-dash or en-dash.
 
-Give the reader findings, not method. Do not explain why the report is ordered as it is, and
-do not add instructions to yourself such as "read every one". State the finding and its effect.
+Give the reader findings, not method. Leave out why the report has this order. Leave out notes to yourself, such as "read every one". State the finding and its effect.
 
-**Always translate integration type codes.** The API returns internal codes. Customers do not
-know them. Use the product name in every customer-facing line:
+**Always translate integration type codes.** The API returns internal codes that customers don't recognise. Use the product name in every customer-facing line:
 
 | API type | Product name |
 |---|---|
@@ -59,7 +57,7 @@ The product says "Google Cloud", not "GCP". Keep the type code in the raw comman
 
 ## 1. Overall setup
 
-Not "is the platform up". What is configured, and does it match the estate the customer owns. Most findings that matter start here, because a clean threat and risk report covering half the estate is worse than useless: it reads as reassurance.
+This section checks what is configured, and if it matches the estate the customer owns. It goes further than "is the platform up". Most findings that matter start here. A clean threat and risk report that covers half the estate is worse than useless. It reads as reassurance.
 
 ### 1.1 Integration Coverage
 
@@ -69,11 +67,17 @@ lw cloud-account list \
       | "\(.[0].type)\ttotal=\(length)\tenabled=\([.[]|select(.enabled==1)]|length)\tok=\([.[]|select(.state.ok)]|length)"'
 ```
 
-Read it as a coverage matrix, not a list. Per cloud the customer should have configuration assessment (`*Cfg`), activity or audit log ingestion (`AwsCtSqs`, `AzureAlSeq`, `GcpAlPubSub`), and agentless scanning (`*Sidekick`). A missing row is a blind spot, not an absence of data.
+Read the output as a coverage matrix, not a list. For each cloud, the customer needs:
+
+- Configuration assessment (`*Cfg`)
+- Activity or audit log ingestion (`AwsCtSqs`, `AzureAlSeq`, `GcpAlPubSub`)
+- Agentless scanning (`*Sidekick`)
+
+A missing row is a blind spot, not an absence of data.
 
 ### 1.2 Integration State
 
-`state.ok=false` alone is not a fault. Read `state.details` before you call anything broken.
+`state.ok=false` alone doesn't prove a fault. Read `state.details` before you call an integration broken.
 
 ```bash
 lw cloud-account list \
@@ -90,24 +94,21 @@ lw cloud-account list \
                  else "FAULT" end)"'
 ```
 
-Three outcomes, and only two are findings:
+Only `DISABLED` and `FAULT` are findings:
 
 | Verdict | Condition | Report as |
 |---|---|---|
-| `DISABLED` | `enabled=0` | **Finding.** The integration collects nothing and raises no alert. |
+| `DISABLED` | `enabled=0` | **Finding.** The integration collects nothing. |
 | `FAULT` | A pipeline stage is not `OK` | **Finding.** Ingestion is broken. |
 | `INTERMITTENT` | Every stage `OK`, only `noData: true` | **Note.** The account is lightly used. |
 
-An intermittent activity log means the pipeline works and the cloud account produced no
-events in the window. That is a quiet account, not a fault. Record it as a note. Do not
-raise it as an action, and do not let it colour the rest of the report.
+An intermittent activity log means the pipeline works. The cloud account has no events in the window. That is a quiet account, not a fault. Record it as a note. Keep it out of the actions. Let it change nothing else in the report.
 
-A disabled integration is the dangerous one. It raises no alert and reads `ok=true`, so it
-stays invisible until someone asks this exact question.
+A disabled integration is the dangerous one. It reads `ok=true`, so only the `enabled` field shows it.
 
 ### 1.3 Agentless Coverage
 
-Every account with a config integration should also have an enabled agentless integration. Sidekick types are `AwsSidekick`, `AwsSidekickOrg`, `AzureSidekick`, `GcpSidekick`.
+Every account with a configuration integration needs an enabled agentless integration too. The Sidekick types are `AwsSidekick`, `AwsSidekickOrg`, `AzureSidekick` and `GcpSidekick`.
 
 ```bash
 lw cloud-account list \
@@ -115,12 +116,12 @@ lw cloud-account list \
       ' | grep -Ei 'cfg|sidekick'
 ```
 
-Compare the configuration count against the agentless count for each cloud. A shortfall is a coverage gap. A disabled agentless integration is the same gap, and it raises no alert. Check `lastSuccessfulTime` on every agentless integration: a stale timestamp on an enabled integration means collection stopped without notice.
+Compare the configuration count with the agentless count for each cloud. A shortfall is a coverage gap. A disabled agentless integration is the same gap. Check `lastSuccessfulTime` on every agentless integration. On an enabled integration, a stale timestamp means collection stopped.
 
 
 ### 1.4 Agent Coverage
 
-Cloud config inventory is the denominator. Time window matters: config datasources are batched, and a 24-hour window returns empty. Use 7 days.
+The cloud configuration inventory is the denominator. Configuration datasources load in batches. A 24-hour window usually returns no rows, so use 7 days.
 
 ```bash
 runq() {  # $1 = LQL
@@ -144,25 +145,29 @@ runq "{ source { LW_CFG_AZURE_COMPUTE_VIRTUALMACHINES v } return distinct { v.SU
 lw agent list | jq -r '"agents installed=\(length)  active=\([.[]|select(.status=="ACTIVE")]|length)"'
 ```
 
-Datasource names: `LW_CFG_AWS_EC2_INSTANCES`, `LW_CFG_GCP_COMPUTE_INSTANCE` (singular), `LW_CFG_AZURE_COMPUTE_VIRTUALMACHINES`.
+The datasource names are `LW_CFG_AWS_EC2_INSTANCES`, `LW_CFG_GCP_COMPUTE_INSTANCE` (singular) and `LW_CFG_AZURE_COMPUTE_VIRTUALMACHINES`.
 
-**The join is per-cloud and imperfect. Report the gap as a number, not a host list, unless you can join cleanly.** Agent tags differ by platform: an AWS agent carries `InstanceId`, a GCP agent carries `ProjectId` and `NumericProjectId`, and an on-prem or hypervisor agent reports `VmProvider: HV` with `Zone: NOT_AVAILABLE` and joins to no cloud inventory at all.
+**Join agents to the inventory one cloud at a time. Report the gap as a number, not a host list, unless the join is clean.** Agent tags differ by platform:
+
+- An AWS agent carries `InstanceId`.
+- A Google Cloud agent carries `ProjectId` and `NumericProjectId`.
+- An on-premises or hypervisor agent reports `VmProvider: HV` with `Zone: NOT_AVAILABLE`. It matches no cloud inventory.
 
 ```bash
 lw agent list | jq -r 'group_by(.tags.VmProvider)[] | "\(.[0].tags.VmProvider // "unknown")\t\(length)"'
 ```
 
-Subtract before raising a gap: containers, serverless, and managed services are not agent targets. A running ECS or Fargate task, a Lambda, and an RDS instance are all expected to have no workload agent.
+Subtract non-targets before you raise a gap. Containers, serverless and managed services are not agent targets. Expect no workload agent on a running ECS or Fargate task, a Lambda or an RDS instance.
 
 
 ### 1.5 Agent Versions
 
-Fortinet publishes current versions and end-of-life dates per platform. Windows and Linux use unrelated version schemes, so compare within a platform only.
+Fortinet publishes current versions and end-of-life dates for each platform. Windows and Linux use unrelated version schemes. Compare versions within one platform only.
 
 - Linux: `https://docs.fortinet.com/document/forticnapp/latest/agent-support/49926/linux-agent-versions`
 - Windows: `https://docs.fortinet.com/document/forticnapp/latest/agent-support/244773/windows-agent-versions`
 
-Both pages carry a table of `version | type | GA | end of engineering | end of support`, with the current release tagged `Latest`. Scope the parse to `<article class="reader__page">` and dedupe rows by version.
+Each page has a table of `version | type | GA | end of engineering | end of support`. The current release has the tag `Latest`. Parse only the content inside `<article class="reader__page">`. Keep one row for each version.
 
 ```bash
 python3 - <<'EOF'
@@ -191,23 +196,27 @@ EOF
 
 Grade each installed version against that table:
 
-- **Past end of support**: unsupported, raise it as a finding.
-- **Past end of engineering**: no more fixes, plan the upgrade.
-- **Behind `Latest`**: note it, do not alarm.
+- **Past end of support**: the version is unsupported. Raise it as a finding.
+- **Past end of engineering**: the version gets no more fixes. Plan the upgrade.
+- **Behind `Latest`**: note it without alarm.
 - **Equal to `Latest`**: current.
 
-Report the fleet spread first, since one straggler matters less than a fleet-wide lag:
+Report the fleet spread first. One straggler matters less than a fleet-wide lag.
 
 ```bash
 lw agent list | jq -r 'group_by(.agentVersion)[] | "\(.[0].agentVersion)\t\(length)"' | sort -rn
 ```
 
-Linux agent versions move roughly every six weeks and end of engineering lands about four months after GA, so a fleet two releases back is usually already past end of engineering. Windows moves far more slowly and has carried `Not Announced` EOL dates for the current release.
+A new Linux agent version ships about every six weeks. End of engineering comes about four months after GA. So a fleet two releases back is usually past end of engineering already. Windows versions move far more slowly. The current Windows release can carry `Not Announced` EOL dates.
 
 
 ### 1.6 Notification Alerts
 
-Three questions: what exists, is it wired to anything, and does the wiring cover the severities that matter.
+Answer these questions:
+
+- What exists?
+- Is it wired to anything?
+- Does the wiring cover the severities that matter?
 
 ```bash
 # What exists
@@ -238,36 +247,30 @@ lw alert-channel list \
       | "\(.name)\tenabled=\(.enabled)\trecipients=\(.data.channelProps.recipients | if type=="string" then split(",") else . end | length)"'
 ```
 
-Rule severities are **numeric**, not names: `1` Critical, `2` High, `3` Medium, `4` Low,
-`5` Info. A rule listing `sev=1` forwards Critical only.
+Rule severities are **numeric**, not names: `1` Critical, `2` High, `3` Medium, `4` Low, `5` Info. A rule that lists `sev=1` forwards Critical only.
 
 Then reconcile:
 
-- **Email-only** means every notification depends on one channel type. Flag it.
-- **A channel wired to no alert rule and no report rule is decorative.** It looks like coverage in the console and delivers nothing. Cross-reference each channel `intgGuid` against the `intgGuidList` of every alert rule and every report rule.
-- **The default email channel reaches every member who has "Default email notification" turned on** in My Profile. The built-in `DEFAULT RULE` report rule sends to it. On a shared tenant, count its recipients and check which event types that rule sends, because one busy day can email everyone on it. A member who turns the setting off stops receiving mail from that channel only.
-- **Severity gaps matter more than channel count.** A Slack channel subscribed only to `Info` while Critical goes to email alone is a worse finding than having no Slack at all.
+- **Email-only** routing means every notification depends on one channel type. Flag it.
+- **A channel wired to no alert rule and no report rule is decorative.** It looks like coverage in the console. It delivers nothing. Check each channel `intgGuid` against the `intgGuidList` of every alert rule and every report rule.
+- **The default email channel reaches every member who turns on "Default email notification"** in My Profile. The built-in `DEFAULT RULE` report rule sends to it. On a shared tenant, count its recipients. Check which event types that rule sends. One busy day can email everyone on it. A member who turns the setting off stops getting mail from that channel only.
+- **Severity gaps matter more than channel count.** Take a Slack channel on `Info` only, with Critical on email alone. That's a worse finding than no Slack at all.
 - Notification stops when either the channel or the rule is disabled. Check `enabled` on each.
 
-Channel-type variety does not prove coverage. Count the channels that no rule references,
-count the disabled rules, and count the disabled channels. Each one looks like coverage in
-the console and delivers nothing.
+A variety of channel types doesn't prove coverage. Count the channels wired to no rule. Count the disabled rules. Count the disabled channels. Each one looks like coverage in the console, but delivers nothing.
 
-Check the rule that routes composite alerts first. A disabled rule there sends the highest
-value detections to no channel.
+Check the rule that routes composite alerts first. If that rule is disabled, the highest-value detections reach no channel.
 
 
 ### 1.7 AI Assist
 
-Console only, no API or CLI surface, so this is a question for the customer rather than a query. Generative AI features are disabled by default, only an administrator can enable them, consent is recorded per feature with user and timestamp, and revoking it disables the feature for every user in the account. See [Appendix C, customer opt-in for generative AI features](https://docs.fortinet.com/document/forticnapp/latest/administration-guide/71895/appendix-c-customer-opt-in-for-generative-ai-features).
+Ask the customer to confirm this setting in the console. Generative AI features are disabled by default. Only an administrator can enable them. FortiCNAPP records consent for each feature, with the user and a timestamp. Revoking consent disables the feature for every user in the account. See [Appendix C, customer opt-in for generative AI features](https://docs.fortinet.com/document/forticnapp/latest/administration-guide/71895/appendix-c-customer-opt-in-for-generative-ai-features).
 
 ---
 
 ## 2. Threats
 
-What has actually been detected. Group by category, not severity. A high-severity Policy
-alert is usually compliance drift; a Composite alert is a correlated detection. Severity
-sorting puts the noise first.
+This section reports the actual detections. Group alerts by category, not severity. A high-severity Policy alert is usually compliance drift. A Composite alert is a correlated detection. A sort by severity puts the noise first.
 
 | Category | Meaning | Volume |
 |---|---|---|
@@ -298,26 +301,22 @@ lw alert list --start -7d --end now \
 
 Name each composite alert. Give the count for anomalies and policy alerts.
 
-A repeating Policy alert is one cause, not many threats. Repeated ingestion failure alerts
-are one integration fault. Move the cause to section 4 as a configuration action.
+A recurring Policy alert is one cause, not many threats. Recurring ingestion failure alerts come from one integration fault. Move the cause to section 4 as a configuration action.
 
 ---
 
 ## 3. Risks
 
-What the customer is exposed to. Risk has two halves, and a report with only one is incomplete:
+This section reports what the customer is exposed to. Risk has two halves. A report with only one half is incomplete:
 
 - **Vulnerable software** on running, internet-exposed hosts.
 - **Critical misconfigurations** in the cloud accounts themselves.
 
-Misconfiguration risk needs no agent and no running workload, so it is often the only half
-that returns data. Report both, and report misconfigurations first when the vulnerability
-half is empty.
+Misconfiguration risk needs no agent and no running workload, so it's often the only half that returns data. Report both halves. When the vulnerability half is empty, report misconfigurations first.
 
 ### 3a. Critical misconfigurations
 
-Compliance reports carry named, resource-counted findings. Severity is numeric: `1` Critical,
-`2` High.
+Compliance reports carry named findings with resource counts. Severity is numeric: `1` Critical, `2` High.
 
 ```bash
 # Accounts assessed
@@ -354,13 +353,11 @@ lacework compliance azure get-report <tenant-id> <subscription-id> --profile "<p
 lacework compliance google list-projects <org-id> --profile "<profile>" --json --noninteractive
 ```
 
-Rank by how many accounts share a finding, not by raw resource count. A Critical present in
-every account is a policy problem worth one conversation. A single account with many
-violating resources is one remediation task.
+Rank by how many accounts share a finding, not by raw resource count. A Critical present in every account is a policy problem worth one conversation. A single account with many violating resources is one remediation task.
 
 ### 3b. Vulnerable software
 
-The target is **internet-exposed, live, vulnerable packages**. Each of those words is a separate filter, and dropping any one of them inflates the number badly.
+The target is **internet-exposed, live, vulnerable packages**. Each of those words is a separate filter. If you drop any one of them, the number inflates badly.
 
 ```bash
 BODY=$(jq -cn '{
@@ -392,72 +389,71 @@ lw api post /api/v2/VulnerabilityObservations/Hosts/search -d "$BODY" \
   | sort -rn | head -20
 ```
 
-**Five filters that keep the number honest:**
+**Keep the number honest:**
 
-1. **`machineStatus` is the "live" filter.** Values are `Running` and `Offline`. A tenant can hold a large observation count where every row belongs to a stopped machine. Without this filter the risk report describes instances that are not running.
+1. **`machineStatus` is the "live" filter.** Its values are `Running` and `Offline`. A tenant can hold a large observation count where every row belongs to a stopped machine. Without this filter, the risk report describes instances that are not running.
 2. **Exclude suppressed findings.** `observationStatusCategory: "Exception"` marks a finding the customer already accepted. Filter to `Vulnerable` so the report covers live risk only.
-3. **`internetExposed` takes `1` as a filter value and returns `true` or `null`.** Filter server-side with `value:1` rather than post-filtering in `jq`. `publicFacing` is a separate field with its own value.
-4. **An empty result returns `null` in place of an empty array.** Write `(.data // [])` so a
-   tenant with no matching findings reports a clean zero.
-5. **Paging caps at 5000 rows.** Follow `paging.urls.nextPage` until null before you quote a total. Otherwise quote `paging.totalRows` and state that the detail is a sample.
+3. **`internetExposed` takes `1` as a filter value and returns `true` or `null`.** Filter server-side with `value:1`, not later in `jq`. `publicFacing` is a separate field with its own value.
+4. **An empty result returns `null` in place of an empty array.** Write `(.data // [])`. Then a tenant with no matching findings reports a clean zero.
+5. **The page limit is 5000 rows.** Follow `paging.urls.nextPage` until it is null before you quote a total. Otherwise, quote `paging.totalRows`. State that the detail is a sample.
 
-**`packageStatus` is populated where a Linux workload agent is installed**, and reads `N/A` otherwise. Use it to sharpen the risk set on Linux-agent hosts. Keep it out of a global filter so Windows and agentless hosts stay in the result.
+**`packageStatus` has a value on hosts that run a Linux workload agent.** On other hosts it reads `N/A`. Use it to sharpen the risk set on hosts with a Linux agent. Keep it out of a global filter, so Windows and agentless hosts stay in the result.
 
 
 ---
 
 ## 4. Recommendations
 
-The deliverable. Derived from sections 1 to 3, never queried directly. Group under the same three headings the customer just read, and rank within each group by how much risk the action removes per unit of effort.
+This section is the deliverable. Derive it from sections 1 to 3, not from a new query. Group the actions under the same three headings the customer just read. Inside each group, rank actions by the risk each one removes for the effort it takes.
 
 ### Act now
 
-Something is not being seen, or something active is not being acted on.
+Something goes unseen, or something active gets no action.
 
 | Trigger, from | Recommendation |
 |---|---|
-| Integration `ok=false` or `enabled=0` (1.2) | Restore ingestion. Until then every clean result below it is unproven. |
-| Composite alert rule disabled or its channel orphaned (1.6) | Wire composite alert routing. The best detections are reaching nobody. |
+| Integration `ok=false` or `enabled=0` (1.2) | Restore ingestion. Until then, every clean result below it is unproven. |
+| Composite alert rule disabled or its channel orphaned (1.6) | Wire composite alert routing. The best detections reach nobody. |
 | Open composite alerts (2) | Investigate each by name. |
 | Agent past end of support (1.5) | Upgrade. Unsupported agents get no fixes. |
 | Cloud with configuration but no enabled agentless scanning (1.3) | Enable agentless workload scanning. That cloud has no vulnerability data. |
-| Critical misconfiguration in every account (3a) | Fix at policy level. One change covers the estate. |
+| Critical misconfiguration in every account (3a) | Fix it at policy level. One change covers the estate. |
 
 ### Plan this quarter
 
-Real coverage or exposure gaps that are not actively on fire.
+These are real coverage or exposure gaps that aren't on fire right now.
 
 | Trigger, from | Recommendation |
 |---|---|
-| Exploitable and fixable observations on exposed live hosts (3b) | Patch these first, named by host risk score. |
-| High misconfigurations opening admin ports to 0.0.0.0/0 (3a) | Close the ingress rules. Exposure exists whether or not a host is running. |
-| Running machines with no agent, net of non-targets (1.4) | Extend agent coverage, or confirm agentless is the deliberate choice for that estate. |
+| Exploitable and fixable observations on exposed live hosts (3b) | Patch these first. Name them in host risk score order. |
+| High misconfigurations that open admin ports to 0.0.0.0/0 (3a) | Close the ingress rules. Exposure exists whether or not a host is running. |
+| Running machines with no agent, net of non-targets (1.4) | Extend agent coverage. Or confirm that agentless is the deliberate choice for that estate. |
 | Agent past end of engineering (1.5) | Schedule the upgrade before it reaches end of support. |
-| Repeating Policy alert traced to one cause (2) | Fix the cause. Removes the noise that hides composite alerts. |
+| Recurring Policy alert traced to one cause (2) | Fix the cause. That removes the noise that hides composite alerts. |
 
 ### Tidy
 
-Hygiene that improves signal without changing exposure much.
+This is hygiene. It improves signal, but changes exposure only a little.
 
 | Trigger, from | Recommendation |
 |---|---|
-| Channels defined but referenced by no rule (1.6) | Wire them or delete them. They read as coverage and deliver nothing. |
-| Rule severity gaps, for example Slack on `sev=5` only (1.6) | Align routing to the severities the customer cares about. |
-| Agents behind `Latest` but inside support (1.5) | Note in the upgrade plan. Not urgent. |
+| Channels wired to no rule (1.6) | Wire them or delete them. They look like coverage, but deliver nothing. |
+| Rule severity gaps, like Slack on `sev=5` only (1.6) | Align routing to the severities the customer cares about. |
+| Agents behind `Latest` but inside support (1.5) | Add them to the upgrade plan. It's not urgent. |
 | Disabled integrations that are genuinely retired (1.2) | Delete them so the coverage matrix reads true. |
-| AI Assist off and wanted (1.7) | Admin enables it per feature, at account level. |
+| AI Assist off and wanted (1.7) | An administrator enables it for each feature, at account level. |
 
 ### Writing the section
 
-- One line per recommendation: the action, the evidence, the effect. "Enable agentless on GCP: `GcpCfg` present with no `GcpSidekick`, so GCP workloads have no vulnerability data."
-- Quantify with what you measured. "14 running instances, 1 agent" lands; "improve agent coverage" does not.
+- Write one line for each recommendation: the action, the evidence, the effect. For example: "Enable agentless scanning on Google Cloud. Google Cloud Configuration has no matching Agentless Workload Scanning, so those workloads have no vulnerability data."
+- Quantify with what you measured. "14 running instances, 1 agent" lands. "Improve agent coverage" doesn't.
 - Never recommend a competitor product, or a control the platform already provides.
 - Separate what the customer does from what Fortinet does.
-- If a section produced nothing, say so plainly, and say what that does and does not prove.
+- If a section found nothing, say so plainly. Say what that result proves, and what it doesn't.
 
 ### Report template
 
-Deliver this shape. Use tables. Replace every angle bracket.
+Deliver this shape. Use tables. Replace every angle-bracket placeholder.
 
 ```markdown
 # FortiCNAPP healthcheck: <tenant>
@@ -562,11 +558,8 @@ Window: <n> days.
 
 ### Honest framing
 
-Healthy ingestion with open composite alerts is "operational, security attention required", not healthy. Good posture over half the estate is not good posture, and section 1 is what catches that.
+Healthy ingestion with open composite alerts is "operational, security attention required", not healthy. Good posture over half the estate is not good posture. Section 1 catches that.
 
-State coverage limits plainly. "No running instances lack an agent" and "no running instances
-were found" read the same in a summary and mean opposite things. When section 1 shows a gap,
-every number in sections 2 and 3 inherits it. Say so.
+State coverage limits plainly. "No running instances lack an agent" and "no running instances were found" read the same in a summary. They mean opposite things. When section 1 shows a gap, every number in sections 2 and 3 inherits it. Say so.
 
-An empty vulnerability result never means zero risk. Check section 3a before you write any
-sentence that says the customer has no exposure.
+An empty vulnerability result is not proof of zero risk. Check section 3a before you write that the customer has no exposure.

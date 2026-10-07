@@ -1,12 +1,11 @@
 # Assessment errors and bulk reporting
 
-A compliance report answers two different questions, and only one of them is "did this
-control pass". The other is "did this control run at all". A control that could not be
-evaluated reads as a gap in the report, not as a violation, so it stays invisible in a
-severity rollup.
+A compliance report tells you if each control passed. It also tells you if each control ran
+at all. A control that the assessment could not evaluate is a gap in the report, not a
+violation. A severity rollup leaves it out.
 
-This matters most across an AWS Organization, where a service control policy or a missing
-role permission suppresses assessment on some accounts and not others.
+This matters most across an AWS Organization. There, a service control policy or a missing
+role permission blocks assessment on some accounts and not on others.
 
 ## Detecting an assessment error
 
@@ -18,18 +17,15 @@ lw api get "api/v2/Reports?format=json&primaryQueryId=<account-id>&reportType=<r
       | select(.STATUS == "CouldNotAssess" or .STATUS == "Error" or .STATUS == "NotAssessed")]'
 ```
 
-The counts give no warning. A `CouldNotAssess` control can report `RESOURCE_COUNT` 20,
-`ASSESSED_RESOURCE_COUNT` 20 and `NUM_VIOLATIONS` 0, which reads as fully assessed and
-clean. Testing for `ASSESSED_RESOURCE_COUNT == 0` finds nothing.
+`STATUS` is the field that marks these controls. Base the test on `STATUS` alone.
 
-`RequiresManualAssessment` is not an error. It always carries `RESOURCE_COUNT` 0, and it
-means the control cannot be automated.
+`RequiresManualAssessment` is not an error. It marks a control that needs a manual check.
+It always carries `RESOURCE_COUNT` 0.
 
 ## Deciding whether to look
 
-The summary block does not count these controls anywhere. `NUM_RESOURCES_NOT_ASSESSED`,
-`NUM_PARTIALLY_ASSESSED_POLICIES_*` and `NUM_UNKNOWN_POLICIES_*` all read 0 even when the
-recommendations carry them. What gives them away is the arithmetic:
+Count these controls with the summary arithmetic below. It subtracts the compliant,
+non-compliant and manual controls from `NUM_RECOMMENDATIONS`:
 
 ```bash
 lw api get "api/v2/Reports?format=json&primaryQueryId=<account-id>&reportType=<report-type>" \
@@ -39,15 +35,15 @@ lw api get "api/v2/Reports?format=json&primaryQueryId=<account-id>&reportType=<r
       | "unassessed: \(.NUM_RECOMMENDATIONS - .NUM_COMPLIANT - .NUM_NOT_COMPLIANT - $m)"'
 ```
 
-A non-zero result is the count of controls that could not be evaluated. Run it first, and
-pull the detail only where it is above 0.
+A non-zero result is the count of controls that the assessment could not evaluate. Run this
+check first. Pull the detail only when the result is above 0.
 
 ## Across an AWS Organization
 
-Report data is per account, so an org-wide view means one call per account.
+Report data is per account. For an org-wide view, make one call per account.
 
-Take the account IDs from the `AwsCfg` integrations. The account is inside the role ARN,
-so read it from there:
+Take the account IDs from the `AwsCfg` integrations. Each account ID is inside the role ARN.
+Read it from there:
 
 ```bash
 ACCOUNTS=$(lw api get /api/v2/CloudAccounts \
@@ -57,12 +53,13 @@ ACCOUNTS=$(lw api get /api/v2/CloudAccounts \
   | sort -u)
 ```
 
-Then walk them, tagging each finding with the account it came from:
+Then walk the accounts. Tag each finding with the account it came from.
 
-Read the list with `while read`, not `for ACCT in $ACCOUNTS`. zsh does not word-split an
-unquoted parameter, so the `for` version runs once with all the account IDs glued into a
-single argument. Collect into a file, because a `while` loop on the right of a pipe runs in
-a subshell and loses any variable it sets:
+Read the list with `while read`. zsh doesn't word-split an unquoted parameter. A
+`for ACCT in $ACCOUNTS` loop runs once, with all the account IDs in a single argument.
+
+Collect the output in a file. A `while` loop on the right of a pipe runs in a subshell. It
+loses any variable that it sets:
 
 ```bash
 TMP=$(mktemp)
@@ -78,26 +75,26 @@ done
 ERRORS=$(jq -s 'add' "$TMP") && rm -f "$TMP"
 ```
 
-Roll the result up two ways. By account, which sizes the blast radius:
+Roll up the result by account. This sizes the blast radius:
 
 ```bash
 echo "$ERRORS" | jq -r 'group_by(.ACCOUNT_ID)[] | "\(.[0].ACCOUNT_ID)\t\(length)"' | sort -k2 -rn
 ```
 
-And by control, which finds the systemic cause. One `REC_ID` failing on every account is a
-single org-wide policy, not fifty separate problems:
+Then roll it up by control. This finds the systemic cause. One `REC_ID` that fails on every
+account points to a single org-wide policy:
 
 ```bash
 echo "$ERRORS" | jq -r 'group_by(.REC_ID) | sort_by(-length) | .[:10][]
   | "\(length)x\t\(.[0].REC_ID)\t\(.[0].TITLE)"'
 ```
 
-Keep the loop serial. Report generation is the expensive part of the call, and a wide fan
-out across a large organization gains little.
+Keep the loop serial. Report generation is the expensive part of each call. A wide fan-out
+across a large organisation gains little.
 
 ## Report type codes
 
-`reportType` when you know the code, `reportName` (URL-encoded) otherwise.
+Use `reportType` when you know the code. Otherwise, use `reportName`, URL-encoded.
 
 | Code | Report |
 |---|---|
@@ -113,15 +110,17 @@ Custom frameworks use their own name. See [reports.md](reports.md).
 
 ## Triggering a scan
 
-A write operation, unlike everything else in this skill. Confirm the target tenant first.
+A scan trigger is a write operation, unlike everything else in this skill. Confirm the
+target tenant first.
 
 ```bash
 lacework compliance aws scan
 lacework compliance azure run-assessment <tenant-id>
 ```
 
-AWS scans cover every integrated account in one pass. Azure targets a single tenant.
+An AWS scan covers every integrated account in one pass. An Azure scan targets one Azure
+tenant.
 
-One scan runs at a time, and a full pass takes one to two hours, so treat the result as a
-daily artifact. Reading a report never triggers a fresh scan, which is why an assessment
-error can persist in report data long after the underlying permission is fixed.
+One scan runs at a time. A full pass takes one to two hours. Treat the result as a daily
+artifact. Reading a report returns the data from the last scan. An assessment error can stay
+in the report data long after you fix the underlying permission.

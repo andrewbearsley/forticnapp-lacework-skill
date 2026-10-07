@@ -1,10 +1,10 @@
 # Compliance reports
 
-Use `GET /api/v2/Reports` with `format=json` to extract compliance report data programmatically.
+Use `GET /api/v2/Reports` with `format=json` to extract compliance report data in a script.
 
 ## Response fields
 
-Policy inventory data commonly appears under `data[].recommendations[]`:
+Policy inventory data usually sits under `data[].recommendations[]`:
 
 ```json
 {
@@ -17,7 +17,7 @@ Policy inventory data commonly appears under `data[].recommendations[]`:
 
 ## AWS reports
 
-Find an AWS account ID from cloud accounts:
+Read an AWS account ID from the `CloudAccounts` integrations:
 
 ```bash
 AWS_ACCOUNT_ID=$(lacework api get "api/v2/CloudAccounts" \
@@ -28,7 +28,7 @@ AWS_ACCOUNT_ID=$(lacework api get "api/v2/CloudAccounts" \
   head -1)
 ```
 
-The account ID is inside the role ARN, not a top-level field.
+The account ID is inside the role ARN, not in a top-level field.
 
 Fetch a report by report type:
 
@@ -48,7 +48,7 @@ lacework api get "api/v2/Reports?format=json&primaryQueryId=${AWS_ACCOUNT_ID}&re
 
 ## Azure reports
 
-Azure report requests usually require a tenant ID as `primaryQueryId` and subscription ID as `secondaryQueryId`.
+An Azure report request usually needs the Azure tenant ID as `primaryQueryId` and the subscription ID as `secondaryQueryId`.
 
 ```bash
 AZURE_TENANT_ID=$(lacework api get "api/v2/CloudAccounts" \
@@ -72,13 +72,13 @@ lacework api get "api/v2/Reports?format=json&primaryQueryId=${AZURE_TENANT_ID}&s
 
 ## Notes
 
-- Reports must be available in the account before the API can return their data.
-- `format=json` is required for structured extraction.
-- Use `reportType` when known; use exact `reportName` when report type is unavailable.
+- A report must be available in the account before the API returns its data.
+- Set `format=json` for structured extraction.
+- Use `reportType` when you know it. Otherwise, use the exact `reportName`.
 
 ## Custom framework definitions
 
-`/api/v2/Reports` returns report *data* (recommendations, findings). The framework *definition* itself, its sections and policy mappings, lives at `/api/v2/ReportDefinitions`.
+`/api/v2/Reports` returns report *data* (recommendations, findings). The framework *definition*, with its sections and policy mappings, is at `/api/v2/ReportDefinitions`.
 
 ### Managing definitions
 
@@ -90,7 +90,7 @@ lacework report-definition update <guid> --file <wrapped.json>
 lacework report-definition delete <guid>
 ```
 
-Wrapped file shape: top-level metadata, sections nested under `reportDefinition`, a `category` slug and `title` per section, and `policies` as a bare string array.
+The wrapped file holds top-level metadata. Sections sit under `reportDefinition`. Each section has a `category` slug and a `title`. `policies` is a bare string array.
 
 ```json
 {
@@ -110,19 +110,19 @@ Wrapped file shape: top-level metadata, sections nested under `reportDefinition`
 }
 ```
 
-Create frameworks through this API when you want them managed as code. `GET /api/v2/ReportDefinitions` lists the frameworks it manages, along with the SYSTEM ones.
+Create frameworks through this API to manage them as code. `GET /api/v2/ReportDefinitions` lists the frameworks it manages, and the SYSTEM frameworks too.
 
 ### Validation errors
 
-Server returns 4xx with a message listing invalid `policyId`s. Common causes:
+The server returns a 4xx response with a message that lists each invalid `policyId`. Common causes:
 
-- Dead reference: policyId no longer in the tenant catalog. Remove from the body.
-- Wrong-domain policyId: for example an AWS policyId in an Azure framework. Filter against domain before sending.
-- Cross-check policy IDs against `GET /api/v2/Policies`.
+- Dead reference: the `policyId` is no longer in the tenant catalogue. Remove it from the body.
+- Wrong-domain `policyId`: for example, an AWS `policyId` in an Azure framework. Filter the `policyId` list by domain before you send the body.
+- Check each `policyId` against `GET /api/v2/Policies`.
 
 ### Gotchas
 
-- Framework name in the URL must be URL-encoded (spaces → `%20`, brackets stay literal).
-- Duplicate `policyId` within a section renders as duplicate rows in the UI. Deduplicate before sending.
-- `POST /api/v2/ReportDefinitions` does not enforce name uniqueness. Two frameworks with identical `reportName` can coexist. Use a distinctive suffix when recreating.
-- The `lacework report-definition update <guid>` CLI does a GET pre-check; it fails on UI-created frameworks because those are unreachable via v2.
+- URL-encode the framework name in the URL. Spaces become `%20`. Brackets stay literal.
+- A duplicate `policyId` in a section shows as duplicate rows in the console. Remove duplicates before you send the body.
+- `POST /api/v2/ReportDefinitions` accepts a `reportName` that is already in use. Two frameworks can share the same `reportName`. Add a distinct suffix when you create a framework again.
+- `lacework report-definition update <guid>` reads the framework with a GET before it updates it. Use it on frameworks that you created through this API.

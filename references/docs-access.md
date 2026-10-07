@@ -1,23 +1,23 @@
-# Fetching the official docs
+# Read the official docs
 
-docs.fortinet.com serves both document text and search results as plain HTML. `curl` reaches
-both, so no browser, no JavaScript rendering, and no extra tooling are needed.
+docs.fortinet.com serves document text and search results as plain HTML. `curl` reads both.
+You need no browser, no JavaScript rendering, and no extra tools.
 
-Search first, then read only the section you need. This keeps the reading small and works
-for every published document.
+Search first. Then read only the section you need. This keeps the reading small. It works for
+every published document.
 
 ## 1. Search one document
 
-Append `/search?q=<query>` to the document path:
+Add `/search?q=<query>` to the document path.
 
-The quickest form is the suggest endpoint, which returns JSON:
+The quickest form is the suggest endpoint. It returns JSON:
 
 ```bash
 curl -s "https://docs.fortinet.com/document/forticnapp/latest/administration-guide/search/suggest?q=alert%20channel" \
   | jq -r '.[] | "https://docs.fortinet.com\(.href) :: \(.title)"'
 ```
 
-The full search page is server-rendered HTML. Each hit sits in an `es-row-title` heading:
+The full search page is server-rendered HTML. Each result sits in an `es-row-title` heading:
 
 ```bash
 curl -sL "https://docs.fortinet.com/document/forticnapp/latest/administration-guide/search?q=alert%20channel" \
@@ -34,11 +34,15 @@ https://docs.fortinet.com/document/forticnapp/latest/administration-guide/746001
 https://docs.fortinet.com/document/forticnapp/latest/administration-guide/413628/configure-alert-channels :: Configure alert channels
 ```
 
-URL-encode spaces in the query as `%20`. The site markup changes between releases. When the grep returns nothing for a query that must have hits, fetch the page and look for the class that wraps each result title, then fix the pattern. Suggest matches loosely on title, so a policy ID or an exact phrase can return neighbouring pages. Read the page before quoting it.
+URL-encode spaces in the query as `%20`.
+
+The site markup changes between releases. If the grep returns nothing for a query that must have results, fetch the page. Find the class that wraps each result title. Update the pattern to match it.
+
+Suggest matches loosely on title. A policy ID or an exact phrase can return neighbouring pages. Read the page before you quote it.
 
 ## 2. Read a section
 
-Section text is server-rendered inside `<article class="reader__page">`. Scope the strip to that element to drop the site navigation. Decode `&amp;` last, so an escaped entity does not decode twice:
+Section text is server-rendered inside `<article class="reader__page">`. Strip the tags inside that element only. This drops the site navigation. Decode `&amp;` last, so that each escaped entity decodes only once:
 
 ```bash
 curl -sL "<section-url>" \
@@ -53,20 +57,22 @@ curl -sL "<section-url>" \
 
 ## 3. List the available documents
 
-The product landing page carries every document path:
+The product landing page lists every document path:
 
 ```bash
 curl -sL https://docs.fortinet.com/product/forticnapp \
   | grep -oE '/document/forticnapp/[^"'"'"' ]*' | sort -u
 ```
 
-Returns the current document paths, including `/latest/administration-guide`, `/latest/cli-reference`, `/latest/api-reference`, `/latest/lql-reference`, and `/latest/release-notes`. The set changes as Fortinet republishes, so read it rather than assuming a fixed list.
+The command returns the current document paths. These include `/latest/administration-guide`, `/latest/cli-reference`, `/latest/api-reference`, `/latest/lql-reference`, and `/latest/release-notes`. The set changes when Fortinet republishes. Read the current list each time, in place of a fixed list.
 
 ## Whole document as PDF
 
-Most documents also publish a PDF, which suits bulk grep across a full reference. This route needs `pdftotext` (macOS: `brew install poppler`; Debian and Ubuntu: `apt install poppler-utils`). The HTML route above covers the same content without it, so prefer the PDF only when you want the whole document at once.
+Fortinet also publishes most documents as a PDF. Use the PDF to grep across a full reference. This route needs `pdftotext`. On macOS, run `brew install poppler`. On Debian and Ubuntu, run `apt install poppler-utils`.
 
-Extract the S3 URL, then convert:
+The HTML route above covers the same content without `pdftotext`. Use the PDF only when you want the whole document at once.
+
+Extract the S3 URL. Then download and convert the PDF:
 
 ```bash
 URL=$(curl -sL https://docs.fortinet.com/document/forticnapp/latest/cli-reference \
@@ -77,6 +83,8 @@ pdftotext -layout cli-ref.pdf cli-ref.txt
 grep -niE 'query|policy|alert-rule|cloud-account' cli-ref.txt
 ```
 
-Keep `sort -u | head -1`: the link appears twice in the page, and the `.pdf` filter matters because the page also embeds many `fortinetweb.s3.amazonaws.com` product icon URLs.
+Keep `sort -u | head -1`, because the link appears twice in the page. Keep the `.pdf` filter too, because the page also contains many `fortinetweb.s3.amazonaws.com` product icon URLs.
 
-The UUID and, on some documents, the version are part of the URL, and both change when the document is re-published. Re-run the extraction rather than caching the URL. The administration guide is published as HTML only, so use the search and section route for it.
+The URL contains a UUID. On some documents it also contains the version. Both change when Fortinet republishes the document. Run the extraction each time you need the PDF, in place of a cached URL.
+
+Fortinet publishes the administration guide as HTML only. Use the search and section route for it.

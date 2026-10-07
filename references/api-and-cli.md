@@ -6,7 +6,7 @@ Use endpoint discovery when you need more data than a high-level CLI command ret
 
 1. Start with the smallest relevant endpoint.
 2. Add required query parameters one at a time.
-3. Always inspect the response structure before you write extraction logic.
+3. Check the response structure before you write extraction logic. Read the keys only, for example with `jq '.data[0] | keys'`.
 4. Record the exact endpoint and parameters that worked in the investigation notes.
 5. Keep secrets out of the notes.
 
@@ -50,7 +50,7 @@ Fields to inspect:
 - `enabled`: whether the integration is enabled.
 - `state.ok`: the current health state.
 - `state.details.message`: the error or status detail, in plain text.
-- `lastSuccessfulTime`: the time of the last successful collection or scan.
+- `state.lastSuccessfulTime`: the time of the last successful collection or scan.
 
 ## Alerts
 

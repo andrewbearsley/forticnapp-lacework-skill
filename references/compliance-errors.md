@@ -89,8 +89,7 @@ echo "$ERRORS" | jq -r 'group_by(.REC_ID) | sort_by(-length) | .[:10][]
   | "\(length)x\t\(.[0].REC_ID)\t\(.[0].TITLE)"'
 ```
 
-Keep the loop serial. Report generation is the expensive part of each call. A wide fan-out
-across a large organisation gains little.
+Keep the loop serial. Report generation is the expensive part of each call.
 
 ## Report type codes
 
@@ -110,8 +109,7 @@ Custom frameworks use their own name. See [reports.md](reports.md).
 
 ## Triggering a scan
 
-A scan trigger is a write operation, unlike everything else in this skill. Confirm the
-target tenant first.
+A scan trigger is a write operation. Confirm the target tenant first.
 
 ```bash
 lacework compliance aws scan

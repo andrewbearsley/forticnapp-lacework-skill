@@ -219,7 +219,7 @@ report needs: `machineStatus` for live hosts, removal of suppressed `Exception` 
 1. List integrations with `cloud-account list`.
 2. To find a provider or integration class, filter by `type`.
 3. Show the target integration by GUID.
-4. Check `enabled`, `state.ok`, `lastSuccessfulTime`, and `state.details.message`.
+4. Check `enabled`, `state.ok`, `state.lastSuccessfulTime`, and `state.details.message`.
 
 See [references/api-and-cli.md](references/api-and-cli.md) for endpoint discovery and cloud account examples.
 

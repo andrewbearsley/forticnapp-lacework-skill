@@ -1,6 +1,6 @@
 # Risk surface queries
 
-Workflows for summarizing current exposure and vulnerability risk. Prefer current-state observation APIs for report context.
+These workflows report current exposure and vulnerability risk. Use the current-state observation APIs for report context.
 
 ## Internet-exposed critical or high host vulnerabilities
 
@@ -43,20 +43,20 @@ For multi-value filters, use `values`, not `value`:
 {"field": "severity", "expression": "in", "values": ["Critical", "High"]}
 ```
 
-Useful report grouping:
+To group the results for a report:
 
-- Follow `paging.urls.nextPage` until it is null before final grouping or counts.
+- Before you group or count, follow `paging.urls.nextPage` until it is null.
 - Group by `hostMachineId` or `hostName`.
 - Count Critical and High observations per host.
-- Track max `hostRiskScore`.
-- Include `internetExposed`, `publicFacing`, `externalIp`, `cloudProvider`, `accountId`.
+- Track the maximum `hostRiskScore`.
+- Include `internetExposed`, `publicFacing`, `externalIp`, `cloudProvider`, and `accountId`.
 - Extract cloud instance metadata from `machineTags`, such as `InstanceId`, `VpcId`, `Zone`, `AmiId`, and `Name`.
 - Count observations where `vulnPublicExploitAvailable` is `true`.
 - Use `observationStatusCategory = Vulnerable` for currently vulnerable observations.
 
 ## High-risk exposed hosts
 
-Use this when the report should start from host risk score rather than severity.
+Use this query to start the report from host risk score, not severity.
 
 ```bash
 BODY=$(jq -cn '{
@@ -116,17 +116,17 @@ lacework api post /api/v2/VulnerabilityObservations/Images/search \
   --json --noninteractive
 ```
 
-For broader inventory context, remove the `hasActiveContainers` filter and prioritize rows where `hasActiveContainers` is true or `activeContainerCount` is greater than zero.
+For wider inventory context, remove the `hasActiveContainers` filter. Then give priority to rows where `hasActiveContainers` is true or `activeContainerCount` is greater than zero.
 
 ## Open-port exposure with host risk
 
-For questions like "0.0.0.0/0 can reach port 22 and host risk score is at least 8", use a two-step workflow:
+For a question like "0.0.0.0/0 can reach port 22 and host risk score is at least 8", follow these steps:
 
-1. Use LQL or inventory/config data to identify network resources that allow the ingress path.
-2. Use host vulnerability observations to identify high-risk exposed hosts.
-3. Join results by account, instance ID, VPC, security group, hostname, or resource tags when available.
+1. Use LQL, or inventory and config data, to find the network resources that allow the ingress path.
+2. Use host vulnerability observations to find high-risk exposed hosts.
+3. Join the two result sets on account, instance ID, VPC, security group, hostname, or resource tags, where present.
 
-Example AWS security group LQL for SSH open to the world:
+This example AWS security group LQL finds SSH open to the world:
 
 ```lql
 {
@@ -149,7 +149,7 @@ Example AWS security group LQL for SSH open to the world:
 }
 ```
 
-Validate LQL syntax with:
+Validate the LQL syntax:
 
 ```bash
 lacework query validate --file <query_file> \
@@ -157,11 +157,11 @@ lacework query validate --file <query_file> \
   --json --noninteractive
 ```
 
-Then run the high-risk exposed hosts query above and correlate the two result sets.
+Then run the high-risk exposed hosts query above. Join the two result sets.
 
 ## Pagination
 
-Observation APIs can return large result sets. Always inspect `paging` before summarizing:
+Observation APIs can return large result sets. Always check `paging` before you group or count:
 
 ```json
 {
@@ -175,7 +175,7 @@ Observation APIs can return large result sets. Always inspect `paging` before su
 }
 ```
 
-If `paging.urls.nextPage` is non-null, fetch it and append `data[]` to the first page before grouping:
+If `paging.urls.nextPage` is not null, fetch that page. Append its `data[]` to the first page before you group:
 
 ```bash
 cp first-page.json all-pages.json
@@ -196,11 +196,12 @@ while [ -n "$NEXT_URL" ]; do
 done
 ```
 
-The CLI API helper expects the path from `nextPage`, not the full URL.
+Give `lacework api get` the path from `nextPage`, not the full URL.
 
 ## Notes
 
-- Observation APIs return current-state vulnerability observations and do not require a time window.
-- Observation requests page through `paging.urls.nextPage`. Use that rather than a `limit` field.
-- `packageStatus` is tenant/data dependent and may be `N/A`; do not require `packageStatus = Active` unless the user specifically needs package activity semantics and the field is known to be populated.
-- Prefer `observationStatusCategory = Vulnerable` for "active", current, or unresolved vulnerability semantics.
+- Observation APIs return current-state vulnerability observations. They need no time window.
+- Observation requests page through `paging.urls.nextPage`. Use it in place of a `limit` field.
+- `packageStatus` depends on the tenant's data. It can be `N/A`.
+- Filter on `packageStatus = Active` only when the user needs package activity and you know the field is populated.
+- Use `observationStatusCategory = Vulnerable` for "active", current, or unresolved vulnerabilities.

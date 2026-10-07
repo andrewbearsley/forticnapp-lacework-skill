@@ -277,6 +277,9 @@ installed agents. Name the source of each number.
 events by `userName`. Filter `eventDescription` for `logged in`. Use the email domain to sort
 users by organisation.
 
+One login can write two or three `logged in` events in the same minute. Count sessions, not
+events. Treat repeat events from one user within 10 minutes as one session.
+
 For questions about human engagement, use this, not alert or agent data. Weekly login counts
 show a real trend. Agent check-ins show only that software runs.
 

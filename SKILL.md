@@ -245,7 +245,44 @@ lacework api post /api/v2/Vulnerabilities/Hosts/search \
 
 Group by `evalGuid` to compare unique assessments. Filter on `evalCtx.collector_type` for `Agent` vs `Agentless`.
 
+**Filter values are case-sensitive and are not the console labels.** `status` is `Active`, not
+`VULNERABLE` or `Vulnerable`. `severity` is `Critical` / `High` / `Medium` / `Low` / `Info`.
+
+**A search with no matching rows returns the literal `null`,** not an empty `data` array. Test
+for `null` before you parse the response. When a search returns `null`, check the filter values
+before you report an empty tenant.
+
+**Page size caps at 5000.** Counting rows on the first page produces a wrong severity split
+that looks plausible. Filter per severity and read `paging.totalRows` instead. Unfiltered
+`totalRows` counts every status, including fixed findings, so it runs far above the live count.
+
 See [references/vulnerabilities.md](references/vulnerabilities.md) for CVE, collector type, provider, and assessment comparison patterns.
+
+### Agent fleet, and which endpoint to ask
+
+`lacework agent list` returns agent state: `agentVersion`, `status` (`ACTIVE` / `INACTIVE`),
+`mode` (`ebpf` / `Windows`), `lastUpdate`, `ipAddr` and `tags`.
+
+`/v2/Entities/MachineDetails` returns host facts: `hostname`, `mid`, `os`, `osVersion`,
+`kernel`, `kernelRelease`, `kernelVersion`, `domain`, `createdTime`. Use `agent list` for agent
+version and status.
+
+The two disagree on count and both are right. `Entities/Machines` counts what the platform
+sees, including cloud-inventory hosts with no agent installed. `agent list` counts installed
+agents. Say which one a number came from.
+
+### Who has actually used the tenant
+
+`/v2/AuditLogs?startTime=<iso>&endTime=<iso>` answers login and usage questions. Group by
+`userName`, filter `eventDescription` for `logged in`, and split by email domain to group users by
+organisation.
+
+Use this rather than alert or agent data when the question is human engagement. Weekly login
+counts show a real trend; agent check-ins only show that software is running.
+
+**Alert `status` is not an engagement signal.** `Open` / `InProgress` / `Closed` is a workflow
+field that users set by hand. Report it as a plain count if asked. Measure engagement from
+logins.
 
 ### Risk surface reporting
 
@@ -315,6 +352,28 @@ Custom framework definitions live at two different endpoints depending on how th
 
 A report also records controls that could not be evaluated, which read as a gap rather than a violation and so never appear in a severity rollup. See [references/compliance-errors.md](references/compliance-errors.md) for the detection predicate, the per-account walk across an AWS Organization, report type codes, and scan triggering.
 
+#### Per-resource evaluations
+
+To ask "which resources fail policy X, and in which accounts", search evaluations rather than pulling whole reports:
+
+```bash
+lacework api post /api/v2/Configs/ComplianceEvaluations/search -d "$(jq -cn \
+  --arg s "$(date -u -v-24H +%Y-%m-%dT%H:%M:%SZ)" --arg e "$(date -u +%Y-%m-%dT%H:%M:%SZ)" '{
+    timeFilter: {startTime: $s, endTime: $e},
+    dataset: "AwsCompliance",
+    filters: [{field: "id", expression: "eq", value: "lacework-global-<n>"}],
+    returns: ["account", "id", "region", "resource", "status", "reason", "reportTime"]
+  }')" --account "$ACCOUNT" --api_key "$API_KEY" --api_secret "$API_SECRET" --json --noninteractive
+```
+
+Request rules:
+
+- `dataset` is mandatory: `AwsCompliance`, `AzureCompliance`, `GcpCompliance` or `K8sCompliance`.
+- The time range caps at 7 days. Default is the last 24 hours.
+- Row fields are `account` (an object with `AccountId` and `Account_Alias`), `id`, `region`, `resource`, `status`, `severity`, `reason`, `recommendation`, `section`, `evalType`, `reportTime`.
+- Use only the row fields above in `filters` and `returns`. A search with no matching rows returns the literal `null`.
+- The dataset holds non-compliant rows. Count passing resources from `GET /api/v2/Reports`.
+
 ### LQL queries
 
 List, inspect, preview, then query:
@@ -326,6 +385,19 @@ lacework query preview-source <DATASOURCE> --json --noninteractive
 ```
 
 Never guess JSON key names inside `RESOURCE_CONFIG`. The docs do not publish that schema. Discover keys via `show-source` (which names the provider API call), `preview-source`, or an explore query. Keys are case-sensitive.
+
+`preview-source` doubles as an emptiness check. It prints sample rows for a populated datasource and nothing at all for an empty one, with exit code 0 either way. When a policy result looks wrong, sweep the datasources its query reads before suspecting the query:
+
+```bash
+for ds in LW_CFG_AWS_EC2_INSTANCES LW_CFG_AWS_SSM_INSTANCE_INFORMATION; do
+  n=$(lacework query preview-source "$ds" --json --noninteractive 2>/dev/null | wc -c)
+  echo "$ds  $([ "$n" -gt 0 ] && echo populated || echo EMPTY)"
+done
+```
+
+Confirm an `EMPTY` result with a `query run` over `--start -7d` before you report it.
+
+`query run -f` takes a YAML or JSON file with `queryId` and `queryText`, not bare LQL. Wrap raw LQL with `jq -Rs '{queryId: "Adhoc", queryText: .}' query.lql > query.json`.
 
 For syntax rules, policy-evaluation constraints (queries used by policies must `return distinct` and return only root-datasource columns when they expand arrays or join `MANY`-cardinality datasources), and the query-to-policy workflow (`query create` → `query run` → `policy create` → `policy update`), see [references/lql.md](references/lql.md).
 

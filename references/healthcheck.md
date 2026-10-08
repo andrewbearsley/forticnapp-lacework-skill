@@ -270,13 +270,14 @@ Ask the customer to confirm this setting in the console. Generative AI features 
 
 ## 2. Threats
 
-This section reports the actual detections. Group alerts by category, not severity. A high-severity Policy alert is usually compliance drift. A Composite alert is a correlated detection. A sort by severity puts the noise first.
+This section reports the actual detections. Start with composite alerts, at any severity. FortiCNAPP builds each one from a timeline of related alerts, so it's a strong signal. Then review every open High or Critical alert, in any category. Group those by `alertName` first, because one cause can fire a hundred alerts.
 
 | Category | Meaning | Volume |
 |---|---|---|
-| `Composite` | Correlated multi-signal detection. | Rare |
+| `Composite` | Built from a timeline of related alerts. A strong signal. | Rare |
 | `Anomaly` | Behavioural deviation from the learned baseline. | Occasional |
-| `Policy` | A rule fired. Mostly compliance drift and ingestion noise. | Dominant |
+| `Policy` | A rule fired. Often compliance drift. | Common |
+| `Platform` | Platform health, such as a log ingestion failure. | Can be high |
 
 ```bash
 lw alert list --start -7d --end now \
@@ -289,6 +290,11 @@ lw alert list --start -7d --end now \
       | if length == 0 then "no composite alerts in window"
         else .[] | "\(.severity)\t\(.status)\t\(.derivedFields.sub_category // "-")\t\(.alertName)\tstart=\(.startTime)" end'
 
+# Open High and Critical alerts, any category, one line per cause
+lw alert list --start -7d --end now \
+  | jq -r '[.[]|select(.status=="Open" and (.severity=="Critical" or .severity=="High"))]
+      | group_by(.alertName)[] | "\(length)x\t\(.[0].severity)\t\(.[0].derivedFields.category // "-")\t\(.[0].alertName)"' | sort -rn
+
 lw alert list --start -7d --end now \
   | jq -r '[.[]|select(.derivedFields.category=="Anomaly")]
       | group_by(.alertName)[] | "\(length)x\t\(.[0].severity)\t\(.[0].alertName)"' | sort -rn
@@ -299,9 +305,9 @@ lw alert list --start -7d --end now \
       | group_by(.alertName)[] | select(length>1) | "\(length)x\t\(.[0].severity)\t\(.[0].alertName)"' | sort -rn
 ```
 
-Name each composite alert. Give the count for anomalies and policy alerts.
+Name each composite alert. List each High or Critical cause with its count. Give the count for anomalies and policy alerts.
 
-A recurring Policy alert is one cause, not many threats. Recurring ingestion failure alerts come from one integration fault. Move the cause to section 4 as a configuration action.
+A recurring alert is one cause, not many threats. Recurring ingestion failure alerts come from one integration fault. Move the cause to section 4 as a configuration action.
 
 ---
 
@@ -413,7 +419,7 @@ lw api post /api/v2/VulnerabilityObservations/Hosts/search -d "$BODY" \
 2. **Exclude suppressed findings.** `observationStatusCategory: "Exception"` marks a finding the customer already accepted. Filter to `Vulnerable` so the report covers live risk only.
 3. **`internetExposed` takes `1` as a filter value and returns `true` or `null`.** Filter server-side with `value:1`, not later in `jq`. `publicFacing` is a separate field with its own value.
 4. **An empty result returns `null` in place of an empty array.** Write `(.data // [])`. Then a tenant with no matching findings reports a clean zero.
-5. **The page limit is 5000 rows.** Follow `paging.urls.nextPage` until it is null before you quote a total. Otherwise, quote `paging.totalRows`. State that the detail is a sample.
+5. **The page limit is 5000 rows.** Follow `paging.urls.nextPage` until it is null before you quote a total. Otherwise, quote `paging.totalRows`. State that the detail is a sample. `totalRows` counts up to 500,000, so quote exactly 500,000 as "500,000 or more".
 
 **`packageStatus` has a value on hosts that run a Linux workload agent.** On other hosts it reads `N/A`. Use it to sharpen the risk set on hosts with a Linux agent. Keep it out of a global filter, so Windows and agentless hosts stay in the result.
 
@@ -433,6 +439,7 @@ Something goes unseen, or something active gets no action.
 | Integration `ok=false` or `enabled=0` (1.2) | Restore ingestion. Until then, every clean result below it is unproven. |
 | Composite alert rule disabled or its channel orphaned (1.6) | Wire composite alert routing. The best detections reach nobody. |
 | Open composite alerts (2) | Investigate each by name. |
+| Open High or Critical alert cause (2) | Triage it. Fix a recurring cause at its source. |
 | Agent past end of support (1.5) | Upgrade. Unsupported agents get no fixes. |
 | Cloud with configuration but no enabled agentless scanning (1.3) | Enable agentless workload scanning. That cloud has no vulnerability data. |
 | Critical misconfiguration in every account (3a) | Fix it at policy level. One change covers the estate. |
@@ -530,10 +537,15 @@ Window: <n> days.
 | Composite | <n> | <n> |
 | Anomaly | <n> | <n> |
 | Policy | <n> | <n> |
+| Platform | <n> | <n> |
 
 **Composite alerts**
 | Severity | Name | Started |
 |---|---|---|
+
+**Open High and Critical alerts, by cause**
+| Count | Severity | Category | Name |
+|---|---|---|---|
 
 **Anomalies of note**
 | Count | Severity | Name |
@@ -576,7 +588,7 @@ Window: <n> days.
 
 ### Honest framing
 
-Healthy ingestion with open composite alerts is "operational, security attention required", not healthy. Good posture over half the estate is not good posture. Section 1 catches that.
+Healthy ingestion with open composite alerts, or open High or Critical alerts, is "operational, security attention required", not healthy. Good posture over half the estate is not good posture. Section 1 catches that.
 
 State coverage limits plainly. "No running instances lack an agent" and "no running instances were found" read the same in a summary. They mean opposite things. When section 1 shows a gap, every number in sections 2 and 3 inherits it. Say so.
 

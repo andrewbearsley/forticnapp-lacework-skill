@@ -127,7 +127,7 @@ full detail:
 | Section | The customer's question | Covers |
 |---|---|---|
 | 1 Overall setup | What have we got, and does it cover what we own? | Integration Coverage, Integration State, Agentless Coverage, Agent Coverage, Agent Versions, Notification Alerts, AI Assist. |
-| 2 Threats | What has actually been detected? | Composite alerts first, then anomalies, then policy noise. Not sorted by severity. |
+| 2 Threats | What has actually been detected? | Composite alerts first. Then open High and Critical alerts, grouped by cause. Then anomalies and policy alerts. |
 | 3 Risks | What are we exposed to? | Critical misconfigurations from compliance reports, plus internet-exposed live vulnerable packages. Misconfiguration risk needs no agent, so it is often the main content. |
 | 4 Recommendations | What should we do about it? | Derived from 1 to 3, ranked act-now / this-quarter / tidy. The deliverable. |
 
@@ -143,7 +143,7 @@ The commands below cover the ingestion and alert-rollup part of section 1:
    - `lacework agent list` for agent status and last check-in.
    - `lacework alert list --start -24h --end now` for alerts from the last 24 hours.
 4. Reduce each JSON result on its own. Report counts, unhealthy or disabled integrations, stale agents, alert severities and recurring alerts. Include an identifier only when the health finding needs it.
-5. Keep platform health separate from security posture. Healthy ingestion with open high-severity alerts is "operational, security attention required", not healthy.
+5. Keep platform health separate from security posture. Healthy ingestion with open composite alerts, or open High or Critical alerts, is "operational, security attention required", not healthy.
 6. If one check still fails after an approved retry, mark only that check incomplete. Include the error category, such as DNS or TLS. A local error says nothing about the tenant.
 
 Example commands. Reduce on the **first** command, before you see raw output. Each one prints
@@ -254,7 +254,9 @@ before you report an empty tenant.
 
 **Pages hold at most 5000 rows.** A severity split counted from the first page is wrong, but
 looks plausible. Filter on each severity and read `paging.totalRows`. Unfiltered `totalRows`
-counts every status, fixed findings included. It is far above the live count.
+counts every status, fixed findings included. It is far above the live count. `totalRows`
+counts up to 500,000. Read exactly 500,000 as "500,000 or more". Narrow the window or the
+filter for a true count.
 
 See [references/vulnerabilities.md](references/vulnerabilities.md) for CVE, collector type, provider, and assessment comparison patterns.
 

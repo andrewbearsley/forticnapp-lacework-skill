@@ -3,7 +3,7 @@ name: forticnapp-lacework
 description: Investigate FortiCNAPP (formerly Lacework) data with the lacework CLI and API. Use when checking cloud integrations, agents, alerts, host vulnerabilities, risk surface, compliance reports, LQL queries, datasource schemas, or discovering authenticated FortiCNAPP API endpoints.
 allowed-tools: Bash, Read, Grep, Glob
 metadata:
-  version: "2.6.0"
+  version: "2.7.0"
   homepage: "https://github.com/andrewbearsley/forticnapp-lacework-skill"
 ---
 
@@ -179,6 +179,9 @@ lw alert list --start -24h --end now \
   | jq -r 'group_by(.alertName)[] | select(length>1) | "\(length)x\t\(.[0].severity)\t\(.[0].alertName)"' | sort -rn
 ```
 
+In zsh, `path` is an array tied to `PATH`. Never name a shell variable `path`: one assignment
+breaks every later command in that shell.
+
 The examples in this skill are for bash and zsh. On Windows, define `lw` in PowerShell. Splat
 the shared flags, because a single string of flags arrives as one argument:
 
@@ -273,11 +276,20 @@ The two return different counts, and both are correct. `Entities/Machines` count
 platform sees, including cloud-inventory hosts with no agent installed. `agent list` counts
 installed agents. Name the source of each number.
 
+`tags.LwTokenShort` on an agent holds the first 30 characters of the `accessToken` it
+registered with. Match it against `lacework agent token list` to find the token alias. Match
+in `jq`, so the token never prints. The healthcheck reference has the command.
+
 ### Who uses the tenant
 
 `/v2/AuditLogs?startTime=<iso>&endTime=<iso>` answers login and usage questions. Group the
 events by `userName`. Filter `eventDescription` for `logged in`. Use the email domain to sort
 users by organisation.
+
+Each event carries `createdTime`, `userName`, `eventName`, `eventDescription`, `userAction`
+and `accountName`. A change event says `(from UI)` or `(from API)` in `eventDescription`.
+Agent token events also carry the full token value there. Redact long hex strings before you
+print a description.
 
 One login can write two or three `logged in` events in the same minute. Count sessions, not
 events. Treat repeat events from one user within 10 minutes as one session.

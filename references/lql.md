@@ -31,6 +31,9 @@ The ground truth is the LQL Reference Guide at https://docs.fortinet.com/documen
 - Use `::string` to cast a JSON path before you compare it.
 - JSON keys inside `RESOURCE_CONFIG` are case-sensitive. Datasource and field names are uppercase.
 - Name every returned field. `return { * }` is not valid LQL.
+- `LIKE` takes `%` and `_` wildcards and is case-sensitive. `ILIKE` is the case-insensitive form. `LIKE '%text%'` matches inside a multi-line value, such as a shell script in `CMDLINE`.
+- `RLIKE` takes a POSIX extended regular expression. Inline flags such as `(?s)` and `(?i)` are not POSIX, so use `ILIKE` or `LIKE` in their place.
+- Number literals are unsigned. To match a negative value, such as a `PID_HASH`, cast the field and compare strings: `p.PID_HASH::string in ('-123', '456')`.
 
 ## Policy evaluation constraints
 
@@ -83,11 +86,17 @@ lacework query run -f explore.yaml --json --noninteractive
 | EC2 | `LW_CFG_AWS_EC2_VOLUMES` | EBS volumes |
 | S3 | `LW_CFG_AWS_S3` | S3 buckets |
 | S3 | `LW_CFG_AWS_S3_GET_BUCKET_ENCRYPTION` | Bucket encryption configuration |
+| S3 | `LW_CFG_AWS_S3_GET_BUCKET_POLICY_STATUS` | Bucket policy status, `PolicyStatus.IsPublic` |
+| S3 | `LW_CFG_AWS_S3_GET_BUCKET_POLICY` | Bucket policy document |
+| S3 | `LW_CFG_AWS_S3_GET_BUCKET_ACL` | Bucket ACL grants |
+| S3 | `LW_CFG_AWS_S3_GET_PUBLIC_ACCESS_BLOCK` | Bucket-level Block Public Access |
 | IAM | `LW_CFG_AWS_IAM_USERS` | IAM users |
 | IAM | `LW_CFG_AWS_IAM_ROLES` | IAM roles |
 | IAM | `LW_CFG_AWS_IAM_POLICIES` | IAM policies |
 | Lambda | `LW_CFG_AWS_LAMBDA` | Lambda functions |
 | RDS | `LW_CFG_AWS_RDS_DB_INSTANCES` | RDS instances |
+
+In the S3 datasources, filter on the bucket name in `RESOURCE_ID`.
 
 ## Standard compliance return fields
 

@@ -47,6 +47,7 @@ Document what works:
 - Read a list with `printf | while IFS= read -r`.
 - A `while` loop on the right of a pipe runs in a subshell. Collect its output in a file.
 - Use a temporary file in place of process substitution `<(...)`. Process substitution isn't POSIX and has no PowerShell form.
+- zsh ties `path` to `PATH`. Never name a variable `path` in an example.
 
 ## API gotchas
 

@@ -13,6 +13,8 @@ Sections 1 to 3 collect the data. Section 4 is the deliverable. Derive it from t
 
 Every command reduces its output with `jq` in the first call. Sections 1 and 2 print no account ID, ARN, queue URL, hostname, IP or email. Section 3 prints cloud account IDs where a finding needs them.
 
+The healthcheck reports what FortiCNAPP sees. Answer resource questions, such as "is this bucket public", from the `LW_CFG_*` configuration datasources with LQL. Keep the cloud provider's own CLI out of it. The inventory also covers accounts you have no credentials for.
+
 Define the tenant flags once. Use a function, not a variable. zsh doesn't word-split an unquoted parameter, so `TENANT='--flag ...'` arrives as one bad argument.
 
 ```bash
@@ -138,10 +140,11 @@ When the gap is large, check volume encryption next. The scanner shares a snapsh
 The cloud configuration inventory is the denominator. Configuration datasources load in batches. A 24-hour window usually returns no rows, so use 7 days.
 
 ```bash
-runq() {  # $1 = LQL
-  lacework api post /api/v2/Queries/execute --profile "<profile>" --json --noninteractive \
-    -d "$(jq -cn --arg q "$1" '{query:{queryText:$q},options:{limit:5000},
-          arguments:[{name:"StartTimeRange",value:(now - 7*86400 | floor | todate)},
+runq() {  # $1 = LQL, $2 = days back (default 7)
+  lacework api post /api/v2/Queries/execute \
+    --profile "<profile>" --account "<account>" --subaccount "<subaccount>" --json --noninteractive \
+    -d "$(jq -cn --arg q "$1" --argjson d "${2:-7}" '{query:{queryText:$q},options:{limit:5000},
+          arguments:[{name:"StartTimeRange",value:(now - $d*86400 | floor | todate)},
                      {name:"EndTimeRange",  value:(now | floor | todate)}]}')"
 }
 
@@ -333,7 +336,58 @@ jq -rn 'now|floor as $n | range(0;8) as $i | "\(($n-($i+1)*604800)|todate) \(($n
 jq -s 'unique_by(.alertId)' alerts-all.jsonl > alerts-all.json
 ```
 
+Search by time only. Filter on `derivedFields.category` in jq, after the merge.
+
 `alert show <id>` and `GET /api/v2/Alerts/<id>?scope=Details` return `alertInfo.supportingFacts`, a tree of `supportingFactText` and `subElements`. Flatten it to read the evidence behind a composite alert: the APIs called, the source IPs, the regions and the principal IDs.
+
+```bash
+lw api get "/api/v2/Alerts/<alertId>?scope=Details" > composite.json
+jq -r 'def facts(d): (.supportingFactText // empty | "\("  "*d)- \(.)"), ((.subElements // [])[] | facts(d+1));
+  .data.alertInfo.supportingFacts[]? | facts(0)' composite.json
+```
+
+#### Trace a host composite alert to its processes
+
+A host composite lists command lines in its facts. Find the processes behind them before you call the host compromised. `entityMap.Machine[].KEY.mid` in the details names the host. A MID can run to 19 digits, so use jq 1.7 or later: older versions round it. `LW_HE_PROCESSES` holds its process history. Search it with strings from the facts:
+
+```bash
+MID=$(jq -r '.data.entityMap.Machine[0].KEY.mid' composite.json)
+runq "{ source { LW_HE_PROCESSES p } filter { p.MID = $MID and (p.CMDLINE like '%/etc/shadow%' or p.CMDLINE like '%/dev/tcp%') }
+       return distinct { p.PROCESS_START_TIME, p.PID_HASH, p.PPID_HASH, p.USERNAME, p.CONTAINER_ID, p.CMDLINE } }" 14 > proc.json
+
+jq -r '(.data//[]) | group_by(.CMDLINE)[]
+  | "\(length)x\t\(.[0].USERNAME)\t\(.[0].CONTAINER_ID // "host" | .[0:12])\t\(.[0].CMDLINE|gsub("\n";" ")|.[0:100])"' proc.json | sort -rn
+```
+
+`PROCESS_START_TIME` is epoch milliseconds. Hundreds of identical children usually mean a loop. Walk `PPID_HASH` up to the parent, which holds the script. Hash values can be negative, so compare them as strings. A long-running parent can start months before the alert, so widen the window:
+
+```bash
+PP=$(jq -r '[(.data//[])[].PPID_HASH|tostring]|unique|.[0:20]|map(@sh)|join(",")' proc.json)
+runq "{ source { LW_HE_PROCESSES p } filter { p.MID = $MID and p.PID_HASH::string in ($PP) }
+       return distinct { p.PROCESS_START_TIME, p.USERNAME, p.CONTAINER_ID, p.CMDLINE } }" 120 \
+  | jq -r '(.data//[]) | unique_by(.CMDLINE)[] | "[\(.PROCESS_START_TIME/1000|floor|todate)] \(.USERNAME)\n\(.CMDLINE)\n"'
+```
+
+**Find who owns the host.** An on-premises host has no cloud account to name an owner. Its agent token does. `tags.LwTokenShort` in `agent list` holds the first 30 characters of the token's `accessToken`. Match them in jq, so the token never prints:
+
+```bash
+lw agent list > agents.json
+lw agent token list > tokens.json
+jq -r --argjson mid "$MID" --slurpfile t tokens.json '.[] | select(.mid == $mid) | .tags.LwTokenShort as $s
+  | $t[0] | (if type=="object" then (.data//[]) else . end) | map(select(.accessToken|startswith($s)))[]
+  | "alias=\(.tokenAlias)\tcreated=\(.createdTime)\tdesc=\(.props.description // "-")"' agents.json
+```
+
+Then search the audit log on the token's creation day for its alias. The creation event names the user, and ends `(from UI)` or `(from API)`. The token events also carry the full token value in `eventDescription`. Redact every long hex string before you print a line:
+
+```bash
+lw api post /api/v2/AuditLogs/search -d '{"timeFilter":{"startTime":"<day>T00:00:00Z","endTime":"<next-day>T00:00:00Z"}}' \
+  | jq -r '(.data//[])[] | select(.eventDescription|test("<alias>")) | "\(.createdTime)\t\(.eventDescription|gsub("[0-9a-fA-F]{32,}";"<redacted>"))"'
+```
+
+**Read the history.** Slice the composites over 13 weeks, as above. Read each one's host from its details. A host that raises a composite each time it comes back online is one standing cause, not a new incident.
+
+On a lab or demo tenant, the parent script can be a deliberate attack simulation. Report the parts of a simulation that carry real risk: a listening shell, or real connections to mining pools and anonymiser addresses.
 
 A recurring alert is one cause, not many threats. Recurring ingestion failure alerts come from one integration fault. Move the cause to section 4 as a configuration action.
 
@@ -473,6 +527,19 @@ runq "{ source { LW_APA_ATTACK_PATHS a } return distinct { a.PATH_ID, a.METRICS,
 ```
 
 Report the count, the target types and the hop shape. An account with no public IP addresses can still show Internet to S3 paths.
+
+**Confirm a bucket is public before you say so.** A path to a bucket can come from Block Public Access being off. Read the bucket's policy status and ACL from the inventory. In the S3 datasources, `RESOURCE_ID` holds the bucket name:
+
+```bash
+B="('<bucket-1>','<bucket-2>')"
+runq "{ source { LW_CFG_AWS_S3_GET_BUCKET_POLICY_STATUS s } filter { s.RESOURCE_ID in $B } return distinct { s.ACCOUNT_ID, s.RESOURCE_ID, s.RESOURCE_CONFIG } }" \
+  | jq -r '(.data//[]) | unique_by(.RESOURCE_ID)[] | "\(.RESOURCE_ID)\tIsPublic=\(.RESOURCE_CONFIG.PolicyStatus.IsPublic)"'
+
+runq "{ source { LW_CFG_AWS_S3_GET_BUCKET_ACL s } filter { s.RESOURCE_ID in $B } return distinct { s.RESOURCE_ID, s.RESOURCE_CONFIG } }" \
+  | jq -r '(.data//[]) | unique_by(.RESOURCE_ID)[] | "\(.RESOURCE_ID)\tpublicGrants=\([.RESOURCE_CONFIG.Grants[]? | select(.Grantee.URI? // "" | test("AllUsers|AuthenticatedUsers")) | .Permission] | join(",") | if .=="" then "none" else . end)"'
+```
+
+A bucket with no bucket policy has no policy status row. `LW_CFG_AWS_S3_GET_BUCKET_POLICY` holds the policy document. Read the `Allow` statements with a `*` principal to name what the public can do. `LW_CFG_AWS_S3_GET_PUBLIC_ACCESS_BLOCK` holds the bucket-level block. Call a bucket public when `IsPublic` is true or an ACL grants public access. Report the rest as "Block Public Access off".
 
 ### 3d. Identities
 

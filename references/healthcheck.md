@@ -118,6 +118,20 @@ lw cloud-account list \
 
 Compare the configuration count with the agentless count for each cloud. A shortfall is a coverage gap. A disabled agentless integration is the same gap. Check `lastSuccessfulTime` on every agentless integration. On an enabled integration, a stale timestamp means collection stopped.
 
+**Then join scanned machines to the running inventory.** An enabled, healthy agentless integration can still cover a small part of the fleet. `Entities/Machines` lists the machines the scanner has seen. `machineTags.InstanceId` joins them to the configuration inventory. `runq` is defined in 1.4.
+
+```bash
+lw api post /api/v2/Entities/Machines/search -d "$(jq -cn '{timeFilter:{startTime:(now-7*86400|floor|todate),endTime:(now|floor|todate)},returns:["mid","machineTags"]}')" \
+  | jq -r '(.data//[])[].machineTags.InstanceId // empty' | sort -u > scanned-ids.txt
+
+runq "{ source { LW_CFG_AWS_EC2_INSTANCES i } filter { i.RESOURCE_CONFIG:State.Name = 'running' } return distinct { i.RESOURCE_ID } }" \
+  | jq -r '(.data//[])[].RESOURCE_ID | split("/") | last' | sort -u > running-ids.txt
+
+echo "running=$(wc -l < running-ids.txt)  scanned=$(grep -cxFf scanned-ids.txt running-ids.txt)"
+```
+
+When the gap is large, check volume encryption next. The scanner shares a snapshot of each volume into the scanning account. A volume encrypted with a customer-managed KMS key needs a key policy that grants the scanning role. `LW_CFG_AWS_EC2_VOLUMES` carries `Encrypted`, `KmsKeyId` and `Attachments[].InstanceId`. Group the unscanned instances' volumes by `KmsKeyId`. Managed node groups are the usual case: many instances, one or two keys, one key-policy change.
+
 
 ### 1.4 Agent Coverage
 
@@ -307,6 +321,20 @@ lw alert list --start -7d --end now \
 
 Name each composite alert. List each High or Critical cause with its count. Give the count for anomalies and policy alerts.
 
+One alert call covers 7 days. For the life of a trial, call `/api/v2/Alerts/search` once per 7-day slice and merge on `alertId`:
+
+```bash
+: > alerts-all.jsonl
+jq -rn 'now|floor as $n | range(0;8) as $i | "\(($n-($i+1)*604800)|todate) \(($n-$i*604800)|todate)"' \
+  | while IFS=' ' read -r a b; do
+      lw api post /api/v2/Alerts/search -d "$(jq -cn --arg a "$a" --arg b "$b" '{timeFilter:{startTime:$a,endTime:$b}}')" \
+        | jq -c '(.data//[])[]' >> alerts-all.jsonl
+    done
+jq -s 'unique_by(.alertId)' alerts-all.jsonl > alerts-all.json
+```
+
+`alert show <id>` and `GET /api/v2/Alerts/<id>?scope=Details` return `alertInfo.supportingFacts`, a tree of `supportingFactText` and `subElements`. Flatten it to read the evidence behind a composite alert: the APIs called, the source IPs, the regions and the principal IDs.
+
 A recurring alert is one cause, not many threats. Recurring ingestion failure alerts come from one integration fault. Move the cause to section 4 as a configuration action.
 
 ---
@@ -344,12 +372,14 @@ for a in $(lacework compliance aws list-accounts --profile "<profile>" --json --
   lacework compliance aws get-report "$a" --profile "<profile>" --json --noninteractive 2>/dev/null \
     | jq -c --arg a "$a" '.recommendations[]
         | select(.STATUS=="NonCompliant" and .SEVERITY<=2)
-        | {acct:$a, sev:.SEVERITY, title:.TITLE, res:(.RESOURCE_COUNT//0)}'
+        | {acct:$a, sev:.SEVERITY, title:.TITLE, res:((.VIOLATIONS//[])|length)}'
 done | jq -s -r 'group_by(.title)
     | map({title:.[0].title, sev:.[0].sev, accts:length, res:(map(.res)|add)})
     | sort_by(.sev, -.accts)[]
     | "sev\(.sev)\taccounts=\(.accts)\tresources=\(.res)\t\(.title)"'
 ```
+
+`VIOLATIONS` holds one entry per violating resource, with `resource`, `region` and `reasons`. Count it for the violation count. The sum across controls equals `VIOLATED_RESOURCE_COUNT` in the summary. `RESOURCE_COUNT` can read the same as `ASSESSED_RESOURCE_COUNT`.
 
 Azure and Google Cloud reports have the same `summary` and `recommendations` fields. Only the identifiers differ. Each `get-report` call reads from `/dev/null`, so it can't consume the loop's input:
 
@@ -387,7 +417,7 @@ The target is **internet-exposed, live, vulnerable packages**. Each of those wor
 BODY=$(jq -cn '{
   filters: [
     {field:"internetExposed",            expression:"eq", value:1},
-    {field:"machineStatus",              expression:"eq", value:"Running"},
+    {field:"machineStatus",              expression:"eq", value:"Running"},   # or "Launched", see note 1
     {field:"observationStatusCategory",  expression:"eq", value:"Vulnerable"},
     {field:"severity",                   expression:"in", values:["Critical","High"]}
   ],
@@ -415,14 +445,50 @@ lw api post /api/v2/VulnerabilityObservations/Hosts/search -d "$BODY" \
 
 **Keep the number honest:**
 
-1. **`machineStatus` is the "live" filter.** Its values are `Running` and `Offline`. A tenant can hold a large observation count where every row belongs to a stopped machine. Without this filter, the risk report describes instances that are not running.
+1. **`machineStatus` is the "live" filter.** `Offline` marks a stopped machine. The live value differs by tenant: `Running` on some, `Launched` on others. Read the values before you filter. A tenant can hold a large observation count where every row belongs to a stopped machine. Without this filter, the risk report describes instances that are not running.
+
+   ```bash
+   lw api post /api/v2/VulnerabilityObservations/Hosts/search -d '{"returns":["machineStatus"]}' \
+     | jq -r '(.data//[]) | map(.machineStatus) | unique | join(",")'
+   ```
 2. **Exclude suppressed findings.** `observationStatusCategory: "Exception"` marks a finding the customer already accepted. Filter to `Vulnerable` so the report covers live risk only.
 3. **`internetExposed` takes `1` as a filter value and returns `true` or `null`.** Filter server-side with `value:1`, not later in `jq`. `publicFacing` is a separate field with its own value.
 4. **An empty result returns `null` in place of an empty array.** Write `(.data // [])`. Then a tenant with no matching findings reports a clean zero.
 5. **The page limit is 5000 rows.** Follow `paging.urls.nextPage` until it is null before you quote a total. Otherwise, quote `paging.totalRows`. State that the detail is a sample. `totalRows` counts up to 500,000, so quote exactly 500,000 as "500,000 or more".
 
+**`machineTags` carries the host facts**: `Name`, `InstanceId`, `Zone`, `AmiId`, `VmProvider` and `lw_InternetExposure`. Ask for it in `returns` when the write-up needs host names or regions.
+
+**Container images.** Agentless scanning also evaluates the images it finds on scanned hosts. `POST /api/v2/Vulnerabilities/Containers/search` returns one row per image, CVE and evaluation. Dedupe on `imageId` and `vulnId` before you count. `evalCtx.image_info` carries `registry`, `repo` and `tags`.
+
 **`packageStatus` has a value on hosts that run a Linux workload agent.** On other hosts it reads `N/A`. Use it to sharpen the risk set on hosts with a Linux agent. Keep it out of a global filter, so Windows and agentless hosts stay in the result.
 
+
+### 3c. Attack paths
+
+`LW_APA_ATTACK_PATHS` carries scored attack paths. `METRICS` holds `path_score`, `path_severity`, `violations`, `vulnerabilities` and `secrets`. `LW_APA_EXPOSURE_PATHS` lists reachability only. In both, `PATH` is an array of hops with `type` and `displayName`. `TARGETS` names the exposed resource.
+
+```bash
+runq "{ source { LW_APA_ATTACK_PATHS a } return distinct { a.PATH_ID, a.METRICS, a.PATH, a.TARGETS } }" \
+  | jq -r '(.data//[])[] | "score=\(.METRICS.path_score)\t\(.METRICS.path_severity)\t\(.TARGETS[0].type)\t\(.TARGETS[0].displayName)\t\([.PATH[][].type]|join(" > "))"'
+```
+
+Report the count, the target types and the hop shape. An account with no public IP addresses can still show Internet to S3 paths.
+
+### 3d. Identities
+
+`LW_CE_IDENTITIES` holds one row per cloud identity. `METRICS` carries `risk_score`, `risk_severity` and `risks[]`. `ENTITLEMENT_COUNTS` carries the entitlement totals. `LAST_USED_TIME` is epoch milliseconds. Risk flags include `ALLOWS_FULL_ADMIN`, `UNUSED_180DAYS_USER`, `INACTIVE_ACCESS_KEY`, `PASSWORD_LOGIN_NO_MFA`, `AI_READ` and `AI_WRITE`.
+
+```bash
+runq "{ source { LW_CE_IDENTITIES i } return distinct { i.PRINCIPAL_ID, i.PROVIDER_TYPE, i.METRICS, i.ENTITLEMENT_COUNTS, i.LAST_USED_TIME } }" > ciem.json
+
+jq -r '(.data//[]) | group_by(.METRICS.risk_severity)[] | "\(.[0].METRICS.risk_severity)\t\(length)"' ciem.json
+
+# Full-admin identities, least recently used first
+jq -r '(.data//[]) | map(select(.METRICS.risks|index("ALLOWS_FULL_ADMIN"))) | sort_by(.LAST_USED_TIME // 0)[]
+  | "\(.METRICS.risk_severity)\tlastUsed=\(if .LAST_USED_TIME==null then "never" else (.LAST_USED_TIME/1000|todate|.[0:10]) end)\t\(.PRINCIPAL_ID|split(":")|last)"' ciem.json
+```
+
+`LAST_USED_TIME` comes from the cloud provider's own last-used data, so it is complete from day one. Entitlement usage counts build from ingested activity logs. On a young tenant, lead with last-used dates and the full-admin list. Quote `entitlements_unused_percentage` once `entitlements_used_count` is populated across the fleet.
 
 ---
 

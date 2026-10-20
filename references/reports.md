@@ -74,7 +74,8 @@ lacework api get "api/v2/Reports?format=json&primaryQueryId=${AZURE_TENANT_ID}&s
 
 - A report must be available in the account before the API returns its data.
 - Set `format=json` for structured extraction.
-- Use `reportType` when you know it. Otherwise, use the exact `reportName`.
+- Use `reportType` when you know it. Otherwise, use the exact `reportName`, URL-encoded.
+- A report is available from the API after it has been generated once, for example by opening it in the console under Compliance.
 
 ## Custom framework definitions
 

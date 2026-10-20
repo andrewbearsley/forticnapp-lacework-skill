@@ -3,7 +3,7 @@ name: forticnapp-lacework
 description: Investigate FortiCNAPP (formerly Lacework) data with the lacework CLI and API. Use when checking cloud integrations, agents, alerts, host vulnerabilities, risk surface, compliance reports, LQL queries, datasource schemas, or discovering authenticated FortiCNAPP API endpoints.
 allowed-tools: Bash, Read, Grep, Glob
 metadata:
-  version: "2.5.1"
+  version: "2.6.0"
   homepage: "https://github.com/andrewbearsley/forticnapp-lacework-skill"
 ---
 
@@ -141,7 +141,7 @@ The commands below cover the ingestion and alert-rollup part of section 1:
 3. Run these read-only checks with explicit tenant flags:
    - `lacework cloud-account list` for integration state.
    - `lacework agent list` for agent status and last check-in.
-   - `lacework alert list --start -24h --end now` for alerts from the last 24 hours.
+   - `lacework alert list --start -24h --end now` for alerts from the last 24 hours. One call covers 7 days at most. For a longer window, slice `/api/v2/Alerts/search` into 7-day calls.
 4. Reduce each JSON result on its own. Report counts, unhealthy or disabled integrations, stale agents, alert severities and recurring alerts. Include an identifier only when the health finding needs it.
 5. Keep platform health separate from security posture. Healthy ingestion with open composite alerts, or open High or Critical alerts, is "operational, security attention required", not healthy.
 6. If one check still fails after an approved retry, mark only that check incomplete. Include the error category, such as DNS or TLS. A local error says nothing about the tenant.

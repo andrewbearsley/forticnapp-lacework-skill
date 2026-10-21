@@ -132,7 +132,32 @@ runq "{ source { LW_CFG_AWS_EC2_INSTANCES i } filter { i.RESOURCE_CONFIG:State.N
 echo "running=$(wc -l < running-ids.txt)  scanned=$(grep -cxFf scanned-ids.txt running-ids.txt)"
 ```
 
-When the gap is large, check volume encryption next. The scanner shares a snapshot of each volume into the scanning account. A volume encrypted with a customer-managed KMS key needs a key policy that grants the scanning role. `LW_CFG_AWS_EC2_VOLUMES` carries `Encrypted`, `KmsKeyId` and `Attachments[].InstanceId`. Group the unscanned instances' volumes by `KmsKeyId`. Managed node groups are the usual case: many instances, one or two keys, one key-policy change.
+When the gap is large, profile the unscanned instances before you name a cause. Group them by region, operator, AMI name and volume key manager:
+
+- `LW_CFG_AWS_EC2_INSTANCES` carries `Operator` and `ImageId`. The row's `RESOURCE_REGION` gives the region. An EKS Auto Mode node is an EC2 managed instance with `Operator.Principal` set to `eks.amazonaws.com`.
+- `LW_CFG_AWS_EC2_IMAGES` carries the AMI `Name`. EKS Auto Mode AMIs are named `eks-auto-*`.
+- `LW_CFG_AWS_EC2_VOLUMES` carries `Encrypted`, `KmsKeyId` and `Attachments[].InstanceId`.
+- `LW_CFG_AWS_KMS_KEYS_DESCRIBE_KEY` carries `KeyManager`: `AWS` or `CUSTOMER`.
+
+```bash
+runq "{ source { LW_CFG_AWS_KMS_KEYS_DESCRIBE_KEY k } return distinct { k.RESOURCE_CONFIG } }" \
+  | jq -r '(.data//[])[].RESOURCE_CONFIG | (if type=="string" then fromjson else . end) | (.KeyMetadata // .) | "\(.KeyId)\t\(.KeyManager)"'
+```
+
+Then match the profile to the setting it points at:
+
+| Profile of the unscanned instances | Setting to check |
+|---|---|
+| Every instance in one region, encrypted or not | The scan regions on the agentless stack in the scanning account |
+| Bottlerocket nodes, EKS Auto Mode included | Scan secondary volumes, on the agentless integration in Settings > Cloud accounts |
+| Volumes on a key with `KeyManager` `CUSTOMER` | The key policy |
+
+The scanner reads snapshots through the EBS direct APIs. It uses a snapshot role in the monitored account. That role can use any KMS key through EC2, when the key policy lets it.
+
+- The AWS managed key `alias/aws/ebs` lets each principal in its account use it through EC2. It never needs a key-policy change. Its policy carries `"Id": "auto-ebs-2"`.
+- A customer-managed key needs a statement for the snapshot role only when its policy doesn't delegate to IAM. Delegation is a statement for `arn:aws:iam::<account>:root` with `kms:*`.
+
+Check that the attribute you blame isn't paired with another one. EKS Auto Mode nodes usually sit on `alias/aws/ebs`. On an account full of Auto Mode clusters, encryption and Auto Mode line up exactly.
 
 
 ### 1.4 Agent Coverage

@@ -11,7 +11,7 @@ const match = source.match(/^---\n[\s\S]*?\n---\n/);
 if (!match) throw new Error('Missing source frontmatter');
 const version = match[0].match(/^  version: "([^"]+)"$/m)?.[1];
 if (!version) throw new Error('Missing source version');
-const header = `---\nname: FortiCNAPP\ndescription: Investigate live FortiCNAPP tenant data using the local lacework CLI and API. Use for cloud integrations, agents, alerts, vulnerabilities, exposure, compliance, code security, LQL and API schema discovery. Not for Mantis ticket access.\nftnt-ai-agent:\n  autoLoad: true\n---\n`;
+const header = `---\nname: FortiCNAPP Assistant\ndescription: Investigate live FortiCNAPP tenant data using the local lacework CLI and API. Use for cloud integrations, agents, alerts, vulnerabilities, exposure, compliance, code security, LQL and API schema discovery. Not for Mantis ticket access.\nftnt-ai-agent:\n  autoLoad: true\n---\n`;
 const body = source.slice(match[0].length);
 const anchor = '## Ground rules';
 if (!body.includes(anchor)) throw new Error('Missing adapter insertion point');

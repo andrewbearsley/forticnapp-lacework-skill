@@ -5,7 +5,7 @@ const cp = require('node:child_process');
 const root = path.resolve(__dirname, '..');
 const out = path.join(root, 'dist', 'forticnapp-lacework');
 const skill = fs.readFileSync(path.join(out, 'SKILL.md'), 'utf8');
-if (!skill.startsWith('---\nname: FortiCNAPP\n') || !skill.includes('## FortiAgent runtime')) throw new Error('Adapter missing');
+if (!skill.startsWith('---\nname: FortiCNAPP Assistant\n') || !skill.includes('## FortiAgent runtime')) throw new Error('Adapter missing');
 for (const dir of ['references', 'scripts']) {
   for (const file of fs.readdirSync(path.join(root, dir))) {
     const source = fs.readFileSync(path.join(root, dir, file));

@@ -64,59 +64,25 @@ iwr -useb https://raw.githubusercontent.com/lacework/go-sdk/main/cli/install.ps1
 
 Or follow the <a href="https://docs.fortinet.com/document/forticnapp/latest/cli-reference" target="_blank">FortiCNAPP CLI reference</a> for other platforms.
 
-### 2. Create an API key
+### 2. Set up a CLI profile
 
-In the FortiCNAPP console: **Settings > API Keys > Add New**. Save the Key ID and Secret (the secret is shown only once).
+Use a named profile with access to the intended tenant. Follow the CLI reference to configure it.
+Keep the CLI configuration and credentials private. Confirm the account and subaccount before a live query.
 
-### 3. Create a credentials file
+### 3. Verify
 
-macOS / Linux:
-
-```bash
-cat > ~/.lacework-credentials.json << 'EOF'
-{
-  "account": "YOUR_ACCOUNT",
-  "keyId": "YOUR_KEY_ID",
-  "secret": "YOUR_SECRET"
-}
-EOF
-chmod 600 ~/.lacework-credentials.json
-```
-
-Windows (PowerShell):
-
-```powershell
-@'
-{
-  "account": "YOUR_ACCOUNT",
-  "keyId": "YOUR_KEY_ID",
-  "secret": "YOUR_SECRET"
-}
-'@ | Set-Content -Encoding utf8 "$env:USERPROFILE\.lacework-credentials.json"
-```
-
-`account` is the subdomain part of `<account>.lacework.net`.
-
-### 4. Verify
-
-macOS / Linux:
+Replace the placeholders with the verified profile and account. Add `--subaccount` when required.
 
 ```bash
-ACCOUNT=$(jq -r '.account' ~/.lacework-credentials.json)
-KEY=$(jq -r '.keyId' ~/.lacework-credentials.json)
-SECRET=$(jq -r '.secret' ~/.lacework-credentials.json)
-
-lacework cloud-account list --account "$ACCOUNT" --api_key "$KEY" --api_secret "$SECRET" --json
+set -o pipefail
+lacework cloud-account list --profile "<profile>" --account "<account>" --json --noninteractive | jq -e 'length'
 ```
 
-Windows (PowerShell):
+Some workflows use Node.js 18 or later for the bundled helpers.
 
-```powershell
-$Creds = Get-Content "$env:USERPROFILE\.lacework-credentials.json" | ConvertFrom-Json
-lacework cloud-account list --account $Creds.account --api_key $Creds.keyId --api_secret $Creds.secret --json
-```
+## FortiAgent package
 
-If that returns JSON, you're set.
+The same source builds the FortiAgent marketplace package. See [the package instructions](fortiagent/README.md).
 
 ## Related
 
@@ -128,7 +94,7 @@ If that returns JSON, you're set.
 
 This is an unofficial community project. It is not affiliated with, endorsed by, or sponsored by Fortinet. "FortiCNAPP" and "Lacework" are trademarks of their respective owners and are used here for descriptive purposes only.
 
-The skill documents commands and API endpoints that an AI agent may execute against your account. Every documented workflow is read-only, but `lacework api post` and the other write verbs are available to any agent that is asked to use them. You're responsible for the agent that loads this skill, the credentials it has access to, and any operations it performs. API behaviour can change without notice. Check any gotcha against the current documentation before you rely on it; `SKILL.md` covers how to pull the official PDF.
+The skill documents commands and API endpoints that an AI agent may execute against your account. The skill defaults to read-only work, but `lacework api post` and the other write verbs are available to any agent that is asked to use them. You're responsible for the agent that loads this skill, the credentials it has access to, and any operations it performs. API behaviour can change without notice. Check any gotcha against the current documentation before you rely on it; `SKILL.md` covers how to pull the official PDF.
 
 Use at your own risk. See [LICENSE](LICENSE) for the full warranty disclaimer.
 

@@ -89,16 +89,19 @@ lw api get /api/v2/IacService/Policies \
 
 ## Scanning source directly
 
-To assess code rather than read a tenant:
+Run a source scan only when the user requests it. Explain the scan scope and any source transfer first.
+Stop if sensitive source cannot be excluded from a remote transfer.
+Verify current CLI syntax and the selected tenant before a scan.
 
-```bash
-lacework sca scan <directory-or-git-url> \
-  --formats lw-json,sarif --output ./results \
-  --profile "<profile>" --noninteractive
+Scan output and diagnostics can contain secrets, source snippets and sensitive URLs.
+Capture both output streams in private files before they enter the tool trace.
+Keep the scan exit status. Use private scratch space and remove it after use.
+Use a tested reducer with a verified schema to produce numeric counts and finite-enum severity or status values.
+Test the reducer with synthetic fixtures before a live scan.
+Drop unknown fields, free text, matches, paths, URLs and fingerprints.
+If the schema or reducer is uncertain, mark the scan incomplete.
+Never display, attach or upload raw scan artifacts or matched material.
+An explicitly requested upload can contain only a separately sanitised summary to a confirmed destination.
 
-lacework iac scan --directory <dir> --profile "<profile>" --noninteractive
-```
-
-`sca scan` covers dependencies, code weaknesses, secrets and licences in one pass. Add `--save-results` to send the results to the tenant. `iac scan` returns a policy table with `POLICY-ID`, `SEVERITY`, `PASS`, `TITLE`, `FILE-PATH` and `LINE`.
-
-`iac scan` runs two engines. The Opal engine needs only the CLI. The checkov engine needs a running Docker daemon. Read the summary line for the finding count.
+`sca scan` covers dependencies, code weaknesses, secrets and licences.
+`iac scan` uses Opal and checkov. Checkov requires a running Docker daemon.

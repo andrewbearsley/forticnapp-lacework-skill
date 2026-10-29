@@ -209,32 +209,16 @@ Fortinet publishes current versions and end-of-life dates for each platform. Win
 - Linux: `https://docs.fortinet.com/document/forticnapp/latest/agent-support/49926/linux-agent-versions`
 - Windows: `https://docs.fortinet.com/document/forticnapp/latest/agent-support/244773/windows-agent-versions`
 
-Each page has a table of `version | type | GA | end of engineering | end of support`. The current release has the tag `Latest`. Parse only the content inside `<article class="reader__page">`. Keep one row for each version.
+Each page has a version table. The current release has the tag `Latest`.
+The bundled helper reads the tables and removes duplicate rows. Node.js 18 or later is required.
+Run it from the skill directory:
 
 ```bash
-python3 - <<'EOF'
-import re, html, urllib.request
-PAGES = {"linux":   ".../agent-support/49926/linux-agent-versions",
-         "windows": ".../agent-support/244773/windows-agent-versions"}
-for os_, url in PAGES.items():
-    t = urllib.request.urlopen(urllib.request.Request(
-        url, headers={"User-Agent": "Mozilla/5.0"}), timeout=60).read().decode("utf-8", "replace")
-    body = re.search(r'(?is)<article class="reader__page"[^>]*>(.*?)</article>', t).group(1)
-    seen, rows = set(), []
-    for tbl in re.findall(r'(?is)<table.*?</table>', body):
-        for r in re.findall(r'(?is)<tr[^>]*>(.*?)</tr>', tbl):
-            c = [html.unescape(re.sub(r'(?s)<[^>]+>', '', x)).strip()
-                 for x in re.findall(r'(?is)<t[dh][^>]*>(.*?)</t[dh]>', r)]
-            if c and re.match(r'^\d+\.\d', c[0]) and c[0] not in seen:
-                seen.add(c[0]); d = [x for x in c if re.match(r'^\d{4}-\d{2}-\d{2}$', x)]
-                rows.append((c[0], "latest" in " ".join(c[1:2]).lower(),
-                             d[1] if len(d) > 1 else None, d[2] if len(d) > 2 else None))
-    latest = next((v for v, is_l, _, _ in rows if is_l), None)
-    print(f"{os_}: latest={latest}")
-    for v, _, eoe, eos in rows[:6]:
-        print(f"   {v:8} EOE={eoe or 'Not Announced':14} EOS={eos or 'Not Announced'}")
-EOF
+node scripts/agent-versions.cjs
 ```
+
+The parser uses the page's HTML structure. Check the source page if its structure changes.
+Mark the version check incomplete if the helper cannot identify the table.
 
 Grade each installed version against that table:
 

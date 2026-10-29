@@ -14,15 +14,15 @@ Useful starting points:
 
 ```bash
 lacework api get /api/v2/CloudAccounts \
-  --account "$ACCOUNT" --api_key "$API_KEY" --api_secret "$API_SECRET" \
+  --profile "$PROFILE" --account "$ACCOUNT" \
   --json --noninteractive
 
 lacework api get /api/v2/Configs/AzureSubscriptions \
-  --account "$ACCOUNT" --api_key "$API_KEY" --api_secret "$API_SECRET" \
+  --profile "$PROFILE" --account "$ACCOUNT" \
   --json --noninteractive
 
 lacework api get /api/v2/Queries \
-  --account "$ACCOUNT" --api_key "$API_KEY" --api_secret "$API_SECRET" \
+  --profile "$PROFILE" --account "$ACCOUNT" \
   --json --noninteractive
 ```
 
@@ -32,7 +32,7 @@ List all integrations:
 
 ```bash
 lacework cloud-account list \
-  --account "$ACCOUNT" --api_key "$API_KEY" --api_secret "$API_SECRET" \
+  --profile "$PROFILE" --account "$ACCOUNT" \
   --json --noninteractive
 ```
 
@@ -40,7 +40,7 @@ Show one integration:
 
 ```bash
 lacework cloud-account show <GUID> \
-  --account "$ACCOUNT" --api_key "$API_KEY" --api_secret "$API_SECRET" \
+  --profile "$PROFILE" --account "$ACCOUNT" \
   --json --noninteractive
 ```
 
@@ -58,7 +58,7 @@ List alerts:
 
 ```bash
 lacework alert list \
-  --account "$ACCOUNT" --api_key "$API_KEY" --api_secret "$API_SECRET" \
+  --profile "$PROFILE" --account "$ACCOUNT" \
   --json --noninteractive
 ```
 
@@ -66,7 +66,7 @@ Show alert details:
 
 ```bash
 lacework alert show <GUID> \
-  --account "$ACCOUNT" --api_key "$API_KEY" --api_secret "$API_SECRET" \
+  --profile "$PROFILE" --account "$ACCOUNT" \
   --json --noninteractive
 ```
 
@@ -76,7 +76,7 @@ List queries:
 
 ```bash
 lacework query list \
-  --account "$ACCOUNT" --api_key "$API_KEY" --api_secret "$API_SECRET" \
+  --profile "$PROFILE" --account "$ACCOUNT" \
   --json --noninteractive
 ```
 
@@ -84,7 +84,7 @@ Run a saved query:
 
 ```bash
 lacework query run <query_id> \
-  --account "$ACCOUNT" --api_key "$API_KEY" --api_secret "$API_SECRET" \
+  --profile "$PROFILE" --account "$ACCOUNT" \
   --json --noninteractive
 ```
 
@@ -100,7 +100,7 @@ lacework api post /api/v2/Queries/execute \
       { "name": "EndTimeRange",   "value": "<end-iso8601>" }
     ]
   }' \
-  --account "$ACCOUNT" --api_key "$API_KEY" --api_secret "$API_SECRET" \
+  --profile "$PROFILE" --account "$ACCOUNT" \
   --json --noninteractive
 ```
 

@@ -18,7 +18,7 @@ lacework api post /api/v2/Vulnerabilities/Hosts/search \
     },
     "returns": ["mid", "evalCtx", "startTime", "endTime", "evalGuid", "vulnId", "severity"]
   }' \
-  --account "$ACCOUNT" --api_key "$API_KEY" --api_secret "$API_SECRET" \
+  --profile "$PROFILE" --account "$ACCOUNT" \
   --json --noninteractive
 ```
 
@@ -53,7 +53,7 @@ List the hosts that a CVE affects:
 
 ```bash
 lacework vulnerability host list-hosts <CVE_ID> \
-  --account "$ACCOUNT" --api_key "$API_KEY" --api_secret "$API_SECRET" \
+  --profile "$PROFILE" --account "$ACCOUNT" \
   --json --noninteractive
 ```
 
@@ -61,7 +61,7 @@ Show the most recent host assessment:
 
 ```bash
 lacework vulnerability host show-assessment <MID> \
-  --account "$ACCOUNT" --api_key "$API_KEY" --api_secret "$API_SECRET" \
+  --profile "$PROFILE" --account "$ACCOUNT" \
   --json --noninteractive
 ```
 

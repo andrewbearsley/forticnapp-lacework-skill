@@ -21,7 +21,7 @@ Read an AWS account ID from the `CloudAccounts` integrations:
 
 ```bash
 AWS_ACCOUNT_ID=$(lacework api get "api/v2/CloudAccounts" \
-  --account "$ACCOUNT" --api_key "$API_KEY" --api_secret "$API_SECRET" \
+  --profile "$PROFILE" --account "$ACCOUNT" \
   --json --noninteractive |
   jq -r '.data[] | select(.type == "AwsCfg")
     | .data.crossAccountCredentials.roleArn | split(":")[4]' |
@@ -34,7 +34,7 @@ Fetch a report by report type:
 
 ```bash
 lacework api get "api/v2/Reports?format=json&primaryQueryId=${AWS_ACCOUNT_ID}&reportType=<report-type>" \
-  --account "$ACCOUNT" --api_key "$API_KEY" --api_secret "$API_SECRET" \
+  --profile "$PROFILE" --account "$ACCOUNT" \
   --json --noninteractive
 ```
 
@@ -42,7 +42,7 @@ Fetch a report by report name:
 
 ```bash
 lacework api get "api/v2/Reports?format=json&primaryQueryId=${AWS_ACCOUNT_ID}&reportName=<url-encoded-report-name>" \
-  --account "$ACCOUNT" --api_key "$API_KEY" --api_secret "$API_SECRET" \
+  --profile "$PROFILE" --account "$ACCOUNT" \
   --json --noninteractive
 ```
 
@@ -52,13 +52,13 @@ An Azure report request usually needs the Azure tenant ID as `primaryQueryId` an
 
 ```bash
 AZURE_TENANT_ID=$(lacework api get "api/v2/CloudAccounts" \
-  --account "$ACCOUNT" --api_key "$API_KEY" --api_secret "$API_SECRET" \
+  --profile "$PROFILE" --account "$ACCOUNT" \
   --json --noninteractive |
   jq -r '.data[] | select(.type == "AzureCfg") | .data.tenantId' |
   head -1)
 
 AZURE_SUBSCRIPTION_ID=$(lacework api get "api/v2/Configs/AzureSubscriptions" \
-  --account "$ACCOUNT" --api_key "$API_KEY" --api_secret "$API_SECRET" \
+  --profile "$PROFILE" --account "$ACCOUNT" \
   --json --noninteractive |
   jq -r '.data[0].subscriptions[0].subscriptionId' |
   head -1)
@@ -66,7 +66,7 @@ AZURE_SUBSCRIPTION_ID=$(lacework api get "api/v2/Configs/AzureSubscriptions" \
 
 ```bash
 lacework api get "api/v2/Reports?format=json&primaryQueryId=${AZURE_TENANT_ID}&secondaryQueryId=${AZURE_SUBSCRIPTION_ID}&reportType=<report-type>" \
-  --account "$ACCOUNT" --api_key "$API_KEY" --api_secret "$API_SECRET" \
+  --profile "$PROFILE" --account "$ACCOUNT" \
   --json --noninteractive
 ```
 

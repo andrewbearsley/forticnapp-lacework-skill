@@ -33,7 +33,7 @@ BODY=$(jq -cn '{
 
 lacework api post /api/v2/VulnerabilityObservations/Hosts/search \
   -d "$BODY" \
-  --account "$ACCOUNT" --api_key "$API_KEY" --api_secret "$API_SECRET" \
+  --profile "$PROFILE" --account "$ACCOUNT" \
   --json --noninteractive
 ```
 
@@ -82,7 +82,7 @@ BODY=$(jq -cn '{
 
 lacework api post /api/v2/VulnerabilityObservations/Hosts/search \
   -d "$BODY" \
-  --account "$ACCOUNT" --api_key "$API_KEY" --api_secret "$API_SECRET" \
+  --profile "$PROFILE" --account "$ACCOUNT" \
   --json --noninteractive
 ```
 
@@ -112,7 +112,7 @@ BODY=$(jq -cn '{
 
 lacework api post /api/v2/VulnerabilityObservations/Images/search \
   -d "$BODY" \
-  --account "$ACCOUNT" --api_key "$API_KEY" --api_secret "$API_SECRET" \
+  --profile "$PROFILE" --account "$ACCOUNT" \
   --json --noninteractive
 ```
 
@@ -153,7 +153,7 @@ Validate the LQL syntax:
 
 ```bash
 lacework query validate --file <query_file> \
-  --account "$ACCOUNT" --api_key "$API_KEY" --api_secret "$API_SECRET" \
+  --profile "$PROFILE" --account "$ACCOUNT" \
   --json --noninteractive
 ```
 
@@ -175,21 +175,23 @@ Observation APIs can return large result sets. Always check `paging` before you 
 }
 ```
 
-If `paging.urls.nextPage` is not null, fetch that page. Append its `data[]` to the first page before you group:
+If `paging.urls.nextPage` is not null, fetch that page. The helper checks the HTTPS origin before use.
+Use a private scratch directory for these files. Remove it when the analysis is complete.
+The first page must be a successful response. Append `data[]` before you group:
 
 ```bash
 cp first-page.json all-pages.json
 NEXT_URL=$(jq -r '.paging.urls.nextPage // empty' first-page.json)
 
 while [ -n "$NEXT_URL" ]; do
-  NEXT_PATH=$(python3 -c 'from urllib.parse import urlparse; import sys; u=urlparse(sys.argv[1]); print(u.path + (("?" + u.query) if u.query else ""))' "$NEXT_URL")
+  NEXT_PATH=$(node scripts/paging-path.cjs "$NEXT_URL" "https://<verified-account>.lacework.net") || exit 1
 
   lacework api get "$NEXT_PATH" \
-    --account "$ACCOUNT" --api_key "$API_KEY" --api_secret "$API_SECRET" \
-    --json --noninteractive > next-page.json
+    --profile "$PROFILE" --account "$ACCOUNT" \
+    --json --noninteractive > next-page.json || exit 1
 
   jq -s '{data: (.[0].data + .[1].data), paging: .[1].paging}' \
-    all-pages.json next-page.json > combined.json
+    all-pages.json next-page.json > combined.json || exit 1
   mv combined.json all-pages.json
 
   NEXT_URL=$(jq -r '.paging.urls.nextPage // empty' next-page.json)

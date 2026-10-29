@@ -1,0 +1,34 @@
+'use strict';
+const fs = require('node:fs');
+const path = require('node:path');
+const crypto = require('node:crypto');
+const cp = require('node:child_process');
+const root = path.resolve(__dirname, '..');
+const out = path.join(root, 'dist', 'forticnapp-lacework');
+const files = ['LICENSE', ...fs.readdirSync(path.join(root, 'references')).filter(f => f.endsWith('.md')).sort().map(f => `references/${f}`), ...fs.readdirSync(path.join(root, 'scripts')).filter(f => f.endsWith('.cjs')).sort().map(f => `scripts/${f}`)];
+const source = fs.readFileSync(path.join(root, 'SKILL.md'), 'utf8');
+const match = source.match(/^---\n[\s\S]*?\n---\n/);
+if (!match) throw new Error('Missing source frontmatter');
+const version = match[0].match(/^  version: "([^"]+)"$/m)?.[1];
+if (!version) throw new Error('Missing source version');
+const header = `---\nname: FortiCNAPP Assistant\ndescription: Investigate live FortiCNAPP tenant data using the local lacework CLI and API. Use for cloud integrations, agents, alerts, vulnerabilities, exposure, compliance, code security, LQL and API schema discovery. Not for Mantis ticket access.\nftnt-ai-agent:\n  autoLoad: true\n---\n`;
+const body = source.slice(match[0].length);
+const anchor = '## Ground rules';
+if (!body.includes(anchor)) throw new Error('Missing adapter insertion point');
+const runtime = fs.readFileSync(path.join(root, 'fortiagent/runtime.md'), 'utf8');
+const result = header + body.replace(anchor, `${runtime}\n${anchor}`);
+fs.rmSync(out, {recursive:true, force:true});
+fs.mkdirSync(out, {recursive:true});
+fs.writeFileSync(path.join(out, 'SKILL.md'), result);
+for (const file of files) {
+  const dest = path.join(out, file);
+  fs.mkdirSync(path.dirname(dest), {recursive:true});
+  fs.copyFileSync(path.join(root, file), dest);
+}
+const sha = cp.execFileSync('git', ['rev-parse', 'HEAD'], {cwd:root, encoding:'utf8'}).trim();
+const dirty = cp.execFileSync('git', ['status', '--porcelain', '--untracked-files=all'], {cwd:root, encoding:'utf8'}).trim().length > 0;
+const inputs = ['SKILL.md', 'fortiagent/runtime.md', ...files];
+const hashes = Object.fromEntries(inputs.map(f => [f, crypto.createHash('sha256').update(fs.readFileSync(path.join(root, f))).digest('hex')]));
+fs.writeFileSync(path.join(root, 'dist', 'fortiagent-build.json'), JSON.stringify({version, sourceCommit:sha, dirty, hashes}, null, 2) + '\n');
+cp.execFileSync('tar', ['-czf', path.join(root, 'dist', 'forticnapp-lacework.tar.gz'), '-C', path.join(root, 'dist'), 'forticnapp-lacework']);
+console.log(`Built ${out} (version ${version}, commit ${sha}, dirty=${dirty})`);

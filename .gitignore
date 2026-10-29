@@ -13,3 +13,6 @@ credentials.json
 
 # Local working notes
 internal/
+
+# Generated marketplace package
+dist/

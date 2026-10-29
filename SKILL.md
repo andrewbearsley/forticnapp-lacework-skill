@@ -3,7 +3,7 @@ name: forticnapp-lacework
 description: Investigate FortiCNAPP (formerly Lacework) data with the lacework CLI and API. Use when checking cloud integrations, agents, alerts, host vulnerabilities, risk surface, compliance reports, LQL queries, datasource schemas, or discovering authenticated FortiCNAPP API endpoints.
 allowed-tools: Bash, Read, Grep, Glob
 metadata:
-  version: "2.7.1"
+  version: "2.8.0"
   homepage: "https://github.com/andrewbearsley/forticnapp-lacework-skill"
 ---
 
@@ -16,75 +16,48 @@ Use the local `lacework` CLI to read tenant data. Ask for JSON output. Parse it 
 - Use read-only commands by default: `list`, `show`, `query`, `get`, and API `GET`/search requests.
 - Add `--json --noninteractive` for scripts and agent runs.
 - Some environments restrict network access or need approval for it. There, get access before the first `lacework` command that calls the API. A failed DNS lookup or connection is not a connectivity test.
-- A DNS, TLS, timeout or connection error is a local environment fault, not a FortiCNAPP health finding. Retry once with network access before you mark the check incomplete.
+- A DNS, TLS, timeout or connection error is an execution limitation, not a tenant finding. Mark the check incomplete if it cannot run.
 - Check the effective account and subaccount before you work on a tenant. When you know the intended `--profile`, `--account` and `--subaccount`, pass them on every live command.
 - Reduce JSON with `jq` **in the first command, before you see the raw output**. In an agent runtime, the full response goes into the tool trace. You can't take it back. Show full integration, agent or alert payloads only when the user asks for them. Raw payloads hold cloud account IDs, role ARNs, queue URLs, hostnames, internal IPs and the email address in `createdOrUpdatedBy`.
 - Keep API secrets out of output, commits and pasted text.
-- Treat credential files as local inputs only. Expect them outside the repo.
+- Use an existing profile. Keep credential files and complete CLI configuration private.
+- Preserve request failures and pagination limits. A failed request is not a zero result.
+- Capture source-scan output privately. Summarise only validated counts and severity or status values.
 - Start with short API calls and narrow filters. Move to broad exports only when you need them.
 - Keep host vulnerability search windows to 7 days or less, unless you know the API accepts more.
 - When you're unsure of a command's syntax, check `lacework <command> --help` or the API docs first.
 
-## Credential pattern
+## Authentication and scope
 
-Use an existing CLI profile, or a JSON credential file in this format:
-
-```json
-{
-  "account": "account-name",
-  "keyId": "api-key-id",
-  "secret": "api-secret"
-}
-```
-
-Load the credentials into shell variables. Use the block for the user's shell.
-
-**macOS / Linux (bash / zsh):**
+Use an existing named CLI profile. Set `PROFILE` and `ACCOUNT` to the verified scope.
+Add `--subaccount` when the target requires it. Check the effective account and subaccount before live calls.
+Read only the selected profile's scope. Do not print the full configuration or list unrelated profiles.
+Confirm field-specific output through CLI help or official documentation first.
+If the scope cannot be read safely, ask the user to confirm it in the CLI or console.
+Keep keys, secrets and bearer tokens out of commands, output and tool arguments.
+Secret values in expanded command arguments can appear in process listings.
 
 ```bash
-CREDENTIALS_PATH="<credentials_path>"
-ACCOUNT=$(jq -r '.account' "$CREDENTIALS_PATH")
-API_KEY=$(jq -r '.keyId' "$CREDENTIALS_PATH")
-API_SECRET=$(jq -r '.secret' "$CREDENTIALS_PATH")
+PROFILE="<verified-profile>"
+ACCOUNT="<verified-account>"
 ```
 
-**Windows (PowerShell):**
-
-```powershell
-$CredentialsPath = "<credentials_path>"
-$Creds = Get-Content $CredentialsPath | ConvertFrom-Json
-$ACCOUNT = $Creds.account
-$API_KEY = $Creds.keyId
-$API_SECRET = $Creds.secret
-```
-
-Pass credentials explicitly:
-
-```bash
-lacework <command> \
-  --account "$ACCOUNT" \
-  --api_key "$API_KEY" \
-  --api_secret "$API_SECRET" \
-  --json --noninteractive
-```
-
-In Windows PowerShell, use a backtick `` ` `` for line continuation, not `\`. Remove the double quotes around `$ACCOUNT` and the other variables.
-
-Add `--subaccount "$SUBACCOUNT"` only when the user gives one, or when the account needs one.
-
-As an alternative, `lacework configure --profile <name>` stores the credentials in the CLI config. Later calls then need only `--profile <name>`. The syntax is the same on all platforms.
+Use the runtime's approval rules. Explain the scope and effects before a state-changing operation.
+A search POST can be read-only. A scan, saved query, policy change or assessment trigger changes state.
 
 ## Core commands
+
+These are command shapes. Apply tenant scope and output reduction before you run them.
 
 Check cloud integrations:
 
 ```bash
 lacework cloud-account list \
-  --account "$ACCOUNT" --api_key "$API_KEY" --api_secret "$API_SECRET" \
+  --profile "$PROFILE" --account "$ACCOUNT" \
   --json --noninteractive
 
 lacework cloud-account show <GUID> \
-  --account "$ACCOUNT" --api_key "$API_KEY" --api_secret "$API_SECRET" \
+  --profile "$PROFILE" --account "$ACCOUNT" \
   --json --noninteractive
 ```
 
@@ -92,7 +65,7 @@ List workload agents (the FortiCNAPP host agent, unrelated to any AI coding agen
 
 ```bash
 lacework agent list \
-  --account "$ACCOUNT" --api_key "$API_KEY" --api_secret "$API_SECRET" \
+  --profile "$PROFILE" --account "$ACCOUNT" \
   --json --noninteractive
 ```
 
@@ -100,11 +73,11 @@ List and inspect alerts:
 
 ```bash
 lacework alert list \
-  --account "$ACCOUNT" --api_key "$API_KEY" --api_secret "$API_SECRET" \
+  --profile "$PROFILE" --account "$ACCOUNT" \
   --json --noninteractive
 
 lacework alert show <GUID> \
-  --account "$ACCOUNT" --api_key "$API_KEY" --api_secret "$API_SECRET" \
+  --profile "$PROFILE" --account "$ACCOUNT" \
   --json --noninteractive
 ```
 
@@ -112,7 +85,7 @@ Run a direct API call:
 
 ```bash
 lacework api get /api/v2/CloudAccounts \
-  --account "$ACCOUNT" --api_key "$API_KEY" --api_secret "$API_SECRET" \
+  --profile "$PROFILE" --account "$ACCOUNT" \
   --json --noninteractive
 ```
 
@@ -135,7 +108,7 @@ Sections 1 to 3 collect the data. Section 4 is the deliverable. Hand over all fo
 
 The commands below cover the ingestion and alert-rollup part of section 1:
 
-1. Read the effective account and subaccount with `lacework configure show account` and `lacework configure show subaccount`. Compare them with the requested tenant before you make live calls. Read only the active profile.
+1. Confirm the selected profile account and subaccount with field-specific reads. Verify their syntax and output first. Compare them with the requested tenant before live calls.
    The full profile list prints API key IDs.
 2. If the environment restricts outbound access, get network permission first.
 3. Run these read-only checks with explicit tenant flags:
@@ -242,7 +215,7 @@ lacework api post /api/v2/Vulnerabilities/Hosts/search \
     },
     "returns": ["mid", "evalCtx", "startTime", "endTime", "evalGuid", "vulnId", "severity"]
   }' \
-  --account "$ACCOUNT" --api_key "$API_KEY" --api_secret "$API_SECRET" \
+  --profile "$PROFILE" --account "$ACCOUNT" \
   --json --noninteractive
 ```
 
@@ -331,7 +304,7 @@ BODY=$(jq -cn '{
 
 lacework api post /api/v2/VulnerabilityObservations/Hosts/search \
   -d "$BODY" \
-  --account "$ACCOUNT" --api_key "$API_KEY" --api_secret "$API_SECRET" \
+  --profile "$PROFILE" --account "$ACCOUNT" \
   --json --noninteractive
 ```
 
@@ -361,7 +334,7 @@ Use `GET /api/v2/Reports` for compliance report data (recommendations, evaluatio
 
 ```bash
 lacework api get "api/v2/Reports?format=json&primaryQueryId=<cloud-account-id>&reportType=<report-type>" \
-  --account "$ACCOUNT" --api_key "$API_KEY" --api_secret "$API_SECRET" \
+  --profile "$PROFILE" --account "$ACCOUNT" \
   --json --noninteractive
 ```
 
@@ -379,7 +352,7 @@ lacework api post /api/v2/Configs/ComplianceEvaluations/search -d "$(jq -cn '{
     dataset: "AwsCompliance",
     filters: [{field: "id", expression: "eq", value: "lacework-global-<n>"}],
     returns: ["account", "id", "region", "resource", "status", "reason", "reportTime"]
-  }')" --account "$ACCOUNT" --api_key "$API_KEY" --api_secret "$API_SECRET" --json --noninteractive
+  }')" --profile "$PROFILE" --account "$ACCOUNT" --json --noninteractive
 ```
 
 Request rules:

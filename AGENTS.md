@@ -15,7 +15,9 @@ agents/openai.yaml    # Codex CLI interface metadata
 LICENSE               # MIT
 ```
 
-There are no scripts. Agent runtimes read the skill as Markdown. SKILL.md is the entry point. It links into `references/` for detail.
+`scripts/` holds shared helpers and fixture tests. `fortiagent/` holds the marketplace adapter.
+`SKILL.md` is the entry point. It links into `references/` for detail.
+Build the marketplace package with `node tools/build-fortiagent.cjs`. Never edit the generated package.
 
 ## What goes in
 

@@ -72,6 +72,18 @@ In Windows PowerShell, use a backtick `` ` `` for line continuation, not `\`. Re
 
 Add `--subaccount "$SUBACCOUNT"` only when the user gives one, or when the account needs one.
 
+The CLI reads `subaccount` from the default profile in `~/.lacework.toml`, also when you pass `--account`, `--api_key` and `--api_secret`. Give each tenant outside the default profile its own profile:
+
+```bash
+lacework configure --profile <name> --json_file <api-key.json> --noninteractive
+```
+
+Pass `--profile <name>` on every later call. Confirm the tenant before the first data call. `data[0].url` holds the tenant URL:
+
+```bash
+lacework api get /api/v2/UserProfile --profile <name> --json --noninteractive | jq -r '.data[0].url'
+```
+
 As an alternative, `lacework configure --profile <name>` stores the credentials in the CLI config. Later calls then need only `--profile <name>`. The syntax is the same on all platforms.
 
 ## Core commands

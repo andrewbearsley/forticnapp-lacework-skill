@@ -86,6 +86,18 @@ lacework api get /api/v2/UserProfile --profile <name> --json --noninteractive | 
 
 As an alternative, `lacework configure --profile <name>` stores the credentials in the CLI config. Later calls then need only `--profile <name>`. The syntax is the same on all platforms.
 
+## MCP server (private preview)
+
+FortiCNAPP also serves a read-only MCP server. See Admin Guide Appendix D, "AI transparency: FortiCNAPP MCP Server".
+
+- Use the organization host: `https://<org>.lacework.net/mcp`. A sub-account host also answers, but sign-in fails with "started by a different user or account".
+- Switch the console to the sub-account before you sign in. The connection binds to the sub-account that is active.
+- Call `get_tenant_status` before the first data call. It names the tenant the connection serves.
+- Only account and organization admins can sign in.
+- A connection lasts 4 hours at most. Then sign in again.
+- In Claude Code, a server added with `claude mcp add` appears only after a session restart.
+- `run_saved_query attack_paths` drops paths that score under 40. For the full set, query `LW_APA_ATTACK_PATHS` through LQL (see `references/healthcheck.md`, section 3c).
+
 ## Core commands
 
 Check cloud integrations:

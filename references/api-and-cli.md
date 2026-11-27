@@ -142,4 +142,5 @@ reference.
 - `GET /api/v2/CloudAccounts`: use it to list cloud integrations and find provider-specific IDs.
 - `GET /api/v2/Configs/AzureSubscriptions`: use it to find Azure subscription IDs for report queries.
 - `POST /api/v2/Vulnerabilities/Hosts/search`: use it for host vulnerability assessment searches.
+- `GET /api/v2/Frameworks`: returns compliance framework definitions, built-in and custom. To extract report content, use `Reports`.
 - `GET /api/v2/ReportDefinitions`: returns report definitions. To extract report content, use `Reports`.

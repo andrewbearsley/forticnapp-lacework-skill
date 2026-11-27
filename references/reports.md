@@ -79,51 +79,56 @@ lacework api get "api/v2/Reports?format=json&primaryQueryId=${AZURE_TENANT_ID}&s
 
 ## Custom framework definitions
 
-`/api/v2/Reports` returns report *data* (recommendations, findings). The framework *definition*, with its sections and policy mappings, is at `/api/v2/ReportDefinitions`.
+`/api/v2/Reports` returns report *data* (recommendations, findings). The framework *definition*, with its sections and policy mappings, is at `/api/v2/Frameworks`. The console lists these frameworks under **Compliance > Framework Catalog**.
 
-### Managing definitions
+### Managing frameworks
+
+| Call | Does |
+|---|---|
+| `GET /api/v2/Frameworks` | Lists all frameworks. `owner` is `Lacework` for built-in frameworks and the tenant account for custom ones. |
+| `GET /api/v2/Frameworks/<url-encoded-name>` | Returns one framework, with `revision` and `sections`. |
+| `POST /api/v2/Frameworks` | Creates a framework. Returns HTTP 201. |
+| `PATCH /api/v2/Frameworks/<url-encoded-name>` | Replaces the sections in place and raises `revision` by 1. Send the full body. |
+
+```bash
+lacework api get /api/v2/Frameworks --json --noninteractive \
+  | jq -r '.data[] | select(.owner != "Lacework") | "\(.name)\trev \(.revision)"'
+```
+
+Body for `POST` and `PATCH`:
+
+```json
+{
+  "name": "<framework name>",
+  "domains": ["AZURE"],
+  "tags": [],
+  "sections": [
+    {
+      "name": "<section title>",
+      "policies": [{ "policyId": "lacework-global-1040" }]
+    }
+  ]
+}
+```
+
+- `domains` takes `AWS`, `AZURE` or `GCP`.
+- Check each `policyId` against `GET /api/v2/Policies` before you send the body.
+- Filter the `policyId` list by domain. A `policyId` from another cloud produces no findings.
+- A framework can reference a disabled policy. Enable the policy with `PATCH /api/v2/Policies/<policyId>` and the body `{"enabled": true}`. Send `enabled` alone.
+
+### Report definitions
+
+`/api/v2/ReportDefinitions` and `lacework report-definition` manage report definitions:
 
 ```bash
 lacework report-definition list --json --noninteractive
 lacework report-definition show <guid> --json --noninteractive
-lacework report-definition create --file <wrapped.json>
-lacework report-definition update <guid> --file <wrapped.json>
-lacework report-definition delete <guid>
 ```
 
-The wrapped file holds top-level metadata. Sections sit under `reportDefinition`. Each section has a `category` slug and a `title`. `policies` is a bare string array.
-
-```json
-{
-  "reportName": "<framework name>",
-  "displayName": "<display name>",
-  "reportType": "COMPLIANCE",
-  "subReportType": "Azure",
-  "reportDefinition": {
-    "sections": [
-      {
-        "category": "<slug>",
-        "title": "<section title>",
-        "policies": ["lacework-global-1040"]
-      }
-    ]
-  }
-}
-```
-
-Create frameworks through this API to manage them as code. `GET /api/v2/ReportDefinitions` lists the frameworks it manages, and the SYSTEM frameworks too.
-
-### Validation errors
-
-The server returns a 4xx response with a message that lists each invalid `policyId`. Common causes:
-
-- Dead reference: the `policyId` is no longer in the tenant catalogue. Remove it from the body.
-- Wrong-domain `policyId`: for example, an AWS `policyId` in an Azure framework. Filter the `policyId` list by domain before you send the body.
-- Check each `policyId` against `GET /api/v2/Policies`.
+To show a framework in the Framework Catalog, create it at `/api/v2/Frameworks`.
 
 ### Gotchas
 
 - URL-encode the framework name in the URL. Spaces become `%20`. Brackets stay literal.
 - A duplicate `policyId` in a section shows as duplicate rows in the console. Remove duplicates before you send the body.
-- `POST /api/v2/ReportDefinitions` accepts a `reportName` that is already in use. Two frameworks can share the same `reportName`. Add a distinct suffix when you create a framework again.
-- `lacework report-definition update <guid>` reads the framework with a GET before it updates it. Use it on frameworks that you created through this API.
+- Check `GET /api/v2/Frameworks` for the name before you create a framework again.

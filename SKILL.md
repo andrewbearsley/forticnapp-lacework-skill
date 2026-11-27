@@ -3,7 +3,7 @@ name: forticnapp-lacework
 description: Investigate FortiCNAPP (formerly Lacework) data with the lacework CLI and API. Use when checking cloud integrations, agents, alerts, host vulnerabilities, risk surface, compliance reports, LQL queries, datasource schemas, or discovering authenticated FortiCNAPP API endpoints.
 allowed-tools: Bash, Read, Grep, Glob
 metadata:
-  version: "2.7.1"
+  version: "2.7.2"
   homepage: "https://github.com/andrewbearsley/forticnapp-lacework-skill"
 ---
 
@@ -389,7 +389,7 @@ lacework api get "api/v2/Reports?format=json&primaryQueryId=<cloud-account-id>&r
   --json --noninteractive
 ```
 
-Custom framework definitions are at two endpoints. The endpoint depends on where you created the framework: `/api/v2/ReportDefinitions` for the API, `/api/v1/Frameworks` for the console. See [references/reports.md](references/reports.md) for AWS/Azure report parameters and custom framework definitions.
+Custom framework definitions are at `/api/v2/Frameworks`. The console Framework Catalog lists them. Create and update custom frameworks there. See [references/reports.md](references/reports.md) for AWS/Azure report parameters and custom framework definitions.
 
 A report also records controls that it could not evaluate. These are gaps, not violations, so a severity rollup leaves them out. See [references/compliance-errors.md](references/compliance-errors.md) for how to detect them, the per-account walk across an AWS Organization, report type codes and scan triggers.
 
